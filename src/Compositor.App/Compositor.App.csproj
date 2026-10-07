@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>Compositor.App</RootNamespace>
+    <AssemblyName>Compositor.App</AssemblyName>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <!-- 不用编译期绑定：骨架阶段的绑定目标都写在 XAML 里，
+         反射绑定（Avalonia 11+ 的默认）不需要 x:DataType，
+         少一个"忘了写 x:DataType 导致整个 .g.cs 报错"的坑。 -->
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.0.0" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.0.0" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Compositor.Core\Compositor.Core.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,123 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:Compositor.App.Controls"
+        x:Class="Compositor.App.MainWindow"
+        Title="Compositor"
+        Width="1440"
+        Height="900"
+        MinWidth="900"
+        MinHeight="600"
+        WindowStartupLocation="CenterScreen">
+
+  <DockPanel LastChildFill="True">
+
+    <!-- ===== 顶栏：菜单 ===== -->
+    <Menu DockPanel.Dock="Top">
+      <MenuItem Header="File">
+        <MenuItem Header="New" IsEnabled="False" />
+        <MenuItem Header="Open..." IsEnabled="False" />
+        <Separator />
+        <MenuItem Header="Save" IsEnabled="False" />
+        <MenuItem Header="Export..." IsEnabled="False" />
+        <Separator />
+        <MenuItem Header="Quit" Command="{Binding QuitCommand}" />
+      </MenuItem>
+
+      <MenuItem Header="Edit">
+        <MenuItem Header="Undo" IsEnabled="False" />
+        <MenuItem Header="Redo" IsEnabled="False" />
+      </MenuItem>
+
+      <MenuItem Header="Layer">
+        <MenuItem Header="New Layer" IsEnabled="False" />
+        <MenuItem Header="Duplicate Layer" IsEnabled="False" />
+        <MenuItem Header="Delete Layer" IsEnabled="False" />
+      </MenuItem>
+
+      <MenuItem Header="Image">
+        <MenuItem Header="Canvas Size..." IsEnabled="False" />
+        <MenuItem Header="Image Size..." IsEnabled="False" />
+      </MenuItem>
+    </Menu>
+
+    <!-- ===== 底栏：状态 ===== -->
+    <Border DockPanel.Dock="Bottom" Padding="10,4" BorderThickness="0,1,0,0"
+            BorderBrush="#33FFFFFF">
+      <StackPanel Orientation="Horizontal" Spacing="24">
+        <TextBlock Text="{Binding DocumentSizeText, StringFormat='文档 {0}'}" />
+        <TextBlock Text="{Binding ActiveLayerName, StringFormat='当前图层：{0}'}" />
+        <TextBlock Text="渲染管线：PixelBuffer → WriteableBitmap → DrawingContext" />
+      </StackPanel>
+    </Border>
+
+    <!-- ===== 左侧：图层 ===== -->
+    <Border DockPanel.Dock="Left" Width="270" BorderThickness="0,0,1,0"
+            BorderBrush="#33FFFFFF">
+      <DockPanel LastChildFill="True">
+        <TextBlock DockPanel.Dock="Top" Text="图层" FontWeight="Bold" Margin="10,8" />
+        <TextBlock DockPanel.Dock="Bottom" Text="合成器尚未就位：此列表为演示数据"
+                   FontSize="11" Opacity="0.6" Margin="10,4,10,8" TextWrapping="Wrap" />
+        <ListBox ItemsSource="{Binding Layers}">
+          <ListBox.ItemTemplate>
+            <DataTemplate>
+              <Grid ColumnDefinitions="Auto,Auto,*" Margin="2,3">
+                <CheckBox Grid.Column="0" IsChecked="{Binding IsVisible, Mode=TwoWay}"
+                          VerticalAlignment="Center" />
+                <Border Grid.Column="1" Width="30" Height="30" Margin="6,0"
+                        BorderBrush="#55FFFFFF" BorderThickness="1">
+                  <Rectangle Fill="{Binding ThumbnailBrush}" />
+                </Border>
+                <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="1">
+                  <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Text="{Binding BlendModeLiteral}" FontSize="10" Opacity="0.65" />
+                </StackPanel>
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+    </Border>
+
+    <!-- ===== 右侧：属性 ===== -->
+    <Border DockPanel.Dock="Right" Width="260" BorderThickness="1,0,0,0"
+            BorderBrush="#33FFFFFF">
+      <ScrollViewer>
+        <StackPanel Margin="12" Spacing="6">
+
+          <TextBlock Text="属性" FontWeight="Bold" Margin="0,0,0,4" />
+          <TextBlock Text="当前图层" FontSize="11" Opacity="0.7" />
+          <TextBlock Text="{Binding ActiveLayerName}" />
+
+          <Separator Margin="0,10" />
+
+          <TextBlock Text="不透明度" />
+          <Slider Minimum="0" Maximum="1" Value="1" IsEnabled="False" />
+          <TextBlock Text="{Binding ActiveLayerOpacityText}" FontSize="11" Opacity="0.7" />
+
+          <Separator Margin="0,10" />
+
+          <TextBlock Text="混合模式（契约的 24 项）" FontSize="11" Opacity="0.7" />
+          <ComboBox ItemsSource="{Binding BlendModes}" SelectedIndex="0"
+                    IsEnabled="False" HorizontalAlignment="Stretch" />
+          <TextBlock Text="{Binding ActiveLayerBlendModeText}" FontSize="11" Opacity="0.7" />
+
+          <Separator Margin="0,10" />
+
+          <TextBlock Text="锁定" />
+          <CheckBox Content="锁定透明像素" IsEnabled="False" />
+          <CheckBox Content="锁定位置" IsEnabled="False" />
+
+          <Separator Margin="0,10" />
+
+          <TextBlock Text="占位说明" FontWeight="Bold" />
+          <TextBlock FontSize="11" Opacity="0.7" TextWrapping="Wrap"
+                     Text="属性控件先禁用，等合成器与选区就位后再接线。下拉框已经用契约层 BlendModeGroups 的 24 个真实字面量填满。" />
+        </StackPanel>
+      </ScrollViewer>
+    </Border>
+
+    <!-- ===== 中央：画布（剩下的空间） ===== -->
+    <controls:CanvasControl Pixels="{Binding CanvasPixels}"
+                            ClipToBounds="True" />
+  </DockPanel>
+</Window>
