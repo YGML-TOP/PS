@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 与 Compositor.Project 同一套本地 Core 覆盖机制：默认相对，合并后零改动。 -->
+  <Import Project="$(MSBuildThisFileDirectory)..\..\Directory.Build.local.props"
+          Condition="Exists('$(MSBuildThisFileDirectory)..\..\Directory.Build.local.props')" />
+
+  <PropertyGroup>
+    <RootNamespace>Compositor.Project.Tests</RootNamespace>
+    <AssemblyName>Compositor.Project.Tests</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+
+    <CompositorCoreProject Condition="'$(CompositorCoreProject)' == ''">$(MSBuildThisFileDirectory)..\..\src\Compositor.Core\Compositor.Core.csproj</CompositorCoreProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Compositor.Project\Compositor.Project.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 夹具随测试走，保证往返测试在任何机器 / CI 上都能真跑。 -->
+    <None Include="Fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

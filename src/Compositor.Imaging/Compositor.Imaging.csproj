@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Compositor.Imaging</RootNamespace>
+    <AssemblyName>Compositor.Imaging</AssemblyName>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <!--
+    依赖方向：Compositor.Imaging 不引用 Compositor.Core。
+    编解码原语（PNG/JPEG、预乘换算、限额判定）必须在没有契约层的情况下也能单独编译，
+    否则 M2 一开工就被 M0 契约层串行卡死。
+  -->
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp" Version="4.153.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- PhysicalMetadata 是 internal：它是 PNG 编码的实现细节，不该出现在公开 API 上，
+         但 pHYs 是手写块实现，必须能被测试直接验证块结构与 CRC。 -->
+    <InternalsVisibleTo Include="Compositor.Imaging.Tests" />
+  </ItemGroup>
+
+</Project>

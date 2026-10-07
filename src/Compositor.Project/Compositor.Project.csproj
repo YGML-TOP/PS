@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    本地 Core 位置覆盖。CompositorCoreProject 默认值是相对路径（见下方），
+    合并 feat/core 后自动生效、合并时零改动。本地开发若 Core 还在别的 worktree，
+    由被 gitignore 的 Directory.Build.local.props 提供绝对路径 —— 绝路径不进版本库。
+  -->
+  <Import Project="$(MSBuildThisFileDirectory)..\..\Directory.Build.local.props"
+          Condition="Exists('$(MSBuildThisFileDirectory)..\..\Directory.Build.local.props')" />
+
+  <PropertyGroup>
+    <RootNamespace>Compositor.Project</RootNamespace>
+    <AssemblyName>Compositor.Project</AssemblyName>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+
+    <!--
+      默认相对路径：合并 feat/core 后 src/Compositor.Core 就在隔壁，此路径即刻生效。
+      绝路径提交进 git 会在换机 / CI 上必然失败，且指向临时 worktree，合并也救不了。
+      要本地指向别处：dotnet build /p:CompositorCoreProject=<绝对路径>
+    -->
+    <CompositorCoreProject Condition="'$(CompositorCoreProject)' == ''">$(MSBuildThisFileDirectory)..\Compositor.Core\Compositor.Core.csproj</CompositorCoreProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 同仓工程，相对引用 -->
+    <ProjectReference Include="$(MSBuildThisFileDirectory)..\Compositor.Imaging\Compositor.Imaging.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 契约层：DocPoint / DocSize / LayerTransform / BlendMode / SamplingQuality -->
+    <ProjectReference Include="$(CompositorCoreProject)" />
+  </ItemGroup>
+
+</Project>

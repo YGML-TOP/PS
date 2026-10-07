@@ -1,0 +1,256 @@
+{
+    "format":  "com.compositor.project",
+    "version":  7,
+    "colorSpace":  "sRGB",
+    "documentID":  "0C5E7A91-3B2D-4F6A-8E1C-9D0B7A6F5E4D",
+    "width":  100,
+    "height":  80,
+    "resolution":  72,
+    "activeLayerID":  "E1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D",
+    "layers":  [
+                   {
+                       "id":  "6F1D3C2A-0B7E-4E8A-9C4D-2A1B3C4D5E6F",
+                       "name":  "Base",
+                       "isVisible":  true,
+                       "transform":  {
+                                         "origin":  [
+                                                        0,
+                                                        0
+                                                    ],
+                                         "size":  [
+                                                      100,
+                                                      80
+                                                  ],
+                                         "rotation":  0,
+                                         "flipX":  false,
+                                         "flipY":  false,
+                                         "sampling":  "High quality"
+                                     },
+                       "imageFile":  "6F1D3C2A-0B7E-4E8A-9C4D-2A1B3C4D5E6F.png"
+                   },
+                   {
+                       "id":  "B1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D",
+                       "name":  "Clip1",
+                       "isVisible":  true,
+                       "transform":  {
+                                         "origin":  [
+                                                        0,
+                                                        0
+                                                    ],
+                                         "size":  [
+                                                      50,
+                                                      50
+                                                  ],
+                                         "rotation":  0,
+                                         "flipX":  false,
+                                         "flipY":  false,
+                                         "sampling":  "High quality"
+                                     },
+                       "imageFile":  "B1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D.png",
+                       "maskSourceID":  "6F1D3C2A-0B7E-4E8A-9C4D-2A1B3C4D5E6F",
+                       "opacity":  1,
+                       "blendMode":  "Normal"
+                   },
+                   {
+                       "id":  "C1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D",
+                       "name":  "Clip2",
+                       "isVisible":  true,
+                       "transform":  {
+                                         "origin":  [
+                                                        10,
+                                                        10
+                                                    ],
+                                         "size":  [
+                                                      50,
+                                                      50
+                                                  ],
+                                         "rotation":  0,
+                                         "flipX":  false,
+                                         "flipY":  false,
+                                         "sampling":  "High quality"
+                                     },
+                       "imageFile":  "C1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D.png",
+                       "maskSourceID":  "B1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D",
+                       "opacity":  0.8,
+                       "blendMode":  "Multiply"
+                   },
+                   {
+                       "id":  "D1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D",
+                       "name":  "Folder",
+                       "isVisible":  true,
+                       "transform":  {
+                                         "origin":  [
+                                                        0,
+                                                        0
+                                                    ],
+                                         "size":  [
+                                                      100,
+                                                      80
+                                                  ],
+                                         "rotation":  0,
+                                         "flipX":  false,
+                                         "flipY":  false,
+                                         "sampling":  "High quality"
+                                     },
+                       "opacity":  1,
+                       "isGroup":  true,
+                       "maskEnabled":  true,
+                       "blendMode":  "Normal",
+                       "maskFile":  "D1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D.mask.png"
+                   },
+                   {
+                       "id":  "E1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D",
+                       "name":  "Child",
+                       "isVisible":  true,
+                       "transform":  {
+                                         "origin":  [
+                                                        5,
+                                                        5
+                                                    ],
+                                         "size":  [
+                                                      60,
+                                                      60
+                                                  ],
+                                         "rotation":  0,
+                                         "flipX":  false,
+                                         "flipY":  false,
+                                         "sampling":  "High quality"
+                                     },
+                       "imageFile":  "E1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D.png",
+                       "maskLinked":  false,
+                       "maskPlacement":  {
+                                             "origin":  [
+                                                            5,
+                                                            5
+                                                        ],
+                                             "size":  [
+                                                          50,
+                                                          50
+                                                      ],
+                                             "rotation":  0,
+                                             "flipX":  false,
+                                             "flipY":  false,
+                                             "sampling":  "High quality"
+                                         },
+                       "maskEnabled":  true,
+                       "parentID":  "D1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D",
+                       "maskFile":  "E1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D.mask.png"
+                   },
+                   {
+                       "id":  "F1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D",
+                       "name":  "Adjust",
+                       "isVisible":  true,
+                       "transform":  {
+                                         "origin":  [
+                                                        0,
+                                                        0
+                                                    ],
+                                         "size":  [
+                                                      100,
+                                                      80
+                                                  ],
+                                         "rotation":  0,
+                                         "flipX":  false,
+                                         "flipY":  false,
+                                         "sampling":  "High quality"
+                                     },
+                       "adjustment":  {
+                                          "kind":  "Levels",
+                                          "hue":  0,
+                                          "saturation":  0,
+                                          "lightness":  0,
+                                          "colorize":  false,
+                                          "levels":  {
+                                                         "channel":  "RGB",
+                                                         "ranges":  [
+                                                                        {
+                                                                            "black":  0,
+                                                                            "gamma":  1,
+                                                                            "white":  255,
+                                                                            "outputBlack":  0,
+                                                                            "outputWhite":  255
+                                                                        },
+                                                                        {
+                                                                            "black":  0,
+                                                                            "gamma":  1,
+                                                                            "white":  255,
+                                                                            "outputBlack":  0,
+                                                                            "outputWhite":  255
+                                                                        },
+                                                                        {
+                                                                            "black":  0,
+                                                                            "gamma":  1,
+                                                                            "white":  255,
+                                                                            "outputBlack":  0,
+                                                                            "outputWhite":  255
+                                                                        },
+                                                                        {
+                                                                            "black":  0,
+                                                                            "gamma":  1,
+                                                                            "white":  255,
+                                                                            "outputBlack":  0,
+                                                                            "outputWhite":  255
+                                                                        }
+                                                                    ]
+                                                     },
+                                          "curves":  {
+                                                         "channel":  "RGB",
+                                                         "channels":  [
+                                                                          [
+                                                                              {
+                                                                                  "x":  0,
+                                                                                  "y":  0
+                                                                              },
+                                                                              {
+                                                                                  "x":  255,
+                                                                                  "y":  255
+                                                                              }
+                                                                          ],
+                                                                          [
+                                                                              {
+                                                                                  "x":  0,
+                                                                                  "y":  0
+                                                                              },
+                                                                              {
+                                                                                  "x":  120,
+                                                                                  "y":  147
+                                                                              },
+                                                                              {
+                                                                                  "x":  255,
+                                                                                  "y":  255
+                                                                              }
+                                                                          ],
+                                                                          [
+                                                                              {
+                                                                                  "x":  0,
+                                                                                  "y":  0
+                                                                              },
+                                                                              {
+                                                                                  "x":  100,
+                                                                                  "y":  114
+                                                                              },
+                                                                              {
+                                                                                  "x":  255,
+                                                                                  "y":  255
+                                                                              }
+                                                                          ],
+                                                                          [
+                                                                              {
+                                                                                  "x":  0,
+                                                                                  "y":  0
+                                                                              },
+                                                                              {
+                                                                                  "x":  115,
+                                                                                  "y":  97
+                                                                              },
+                                                                              {
+                                                                                  "x":  255,
+                                                                                  "y":  238
+                                                                              }
+                                                                          ]
+                                                                      ]
+                                                     }
+                                      }
+                   }
+               ]
+}
