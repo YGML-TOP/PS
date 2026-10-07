@@ -61,7 +61,64 @@ public static class ProjectJson
         options.Converters.Add(new LayerTransformConverter());
         options.Converters.Add(new BlendModeConverter());
         options.Converters.Add(new SamplingQualityConverter());
+
+        // 🔴 UUID 必须按大写写出。这是「两边产出的 manifest 可做字节级比对」的前提，
+        // 不是风格问题：Swift 的 UUID.uuidString 是大写，.NET 的 Guid.ToString() 是小写，
+        // 而同一份 manifest 里的 imageFile 又必须是大写 UUID + ".png"
+        // （Mac 在 ProjectStore.swift:223,243 按 uuidString 校验它）。
+        // 于是小写 id + 大写 imageFile 会在两边产出**永远不可能相同**的字节，
+        // 且 id 与 imageFile 自身看起来就是"对不上"。
+        options.Converters.Add(new UppercaseGuidConverter());
+        options.Converters.Add(new UppercaseNullableGuidConverter());
         return options;
+    }
+}
+
+/// <summary>
+/// <c>Guid</c> ↔ 大写 UUID 字符串。
+/// </summary>
+/// <remarks>
+/// <para>
+/// Swift 的 <c>UUID</c> 走 Foundation 的 <c>Codable</c>，编码结果是 <c>uuidString</c>，即<b>大写</b>；
+/// .NET 的 <c>Guid.ToString()</c> 默认<b>小写</b>。两者读得进对方（Foundation 解析忽略大小写），
+/// 所以互通不受影响，但字节级比对永远对不上。
+/// </para>
+/// <para>
+/// <b>读取一律忽略大小写</b>：既兼容 Mac 写出的，也兼容早于本转换器写出的
+/// 小写历史文件。
+/// </para>
+/// </remarks>
+public sealed class UppercaseGuidConverter : JsonConverter<Guid>
+{
+    /// <inheritdoc />
+    public override Guid Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        => reader.GetGuid();
+
+    /// <inheritdoc />
+    public override void Write(Utf8JsonWriter writer, Guid value, JsonSerializerOptions options)
+        => writer.WriteStringValue(value.ToString("D", CultureInfo.InvariantCulture).ToUpperInvariant());
+}
+
+/// <summary>
+/// <see cref="UppercaseGuidConverter"/> 的可空版。仅在值非 null 时接管，
+/// null 交给 <c>WhenWritingNull</c> 处理。
+/// </summary>
+public sealed class UppercaseNullableGuidConverter : JsonConverter<Guid?>
+{
+    /// <inheritdoc />
+    public override Guid? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        => reader.TokenType == JsonTokenType.Null ? null : reader.GetGuid();
+
+    /// <inheritdoc />
+    public override void Write(Utf8JsonWriter writer, Guid? value, JsonSerializerOptions options)
+    {
+        if (value is null)
+        {
+            writer.WriteNullValue();
+            return;
+        }
+
+        writer.WriteStringValue(value.Value.ToString("D", CultureInfo.InvariantCulture).ToUpperInvariant());
     }
 }
 

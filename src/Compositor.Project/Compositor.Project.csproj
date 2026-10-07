@@ -30,5 +30,11 @@
     <!-- 契约层：DocPoint / DocSize / LayerTransform / BlendMode / SamplingQuality -->
     <ProjectReference Include="$(CompositorCoreProject)" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- PngHeader 是 internal：它是 PNG 格式判定的实现细节，不是公共 API。
+         但它的每一条取值规则都直接决定「Mac 打得开的包 Windows 也打得开」，
+         必须能被测试逐条验，所以只给测试程序集开内部可见。-->
+    <InternalsVisibleTo Include="Compositor.Project.Tests" />
+  </ItemGroup>
 
 </Project>
