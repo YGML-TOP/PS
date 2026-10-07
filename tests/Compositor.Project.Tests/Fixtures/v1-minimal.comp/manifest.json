@@ -1,0 +1,32 @@
+{
+    "format":  "com.compositor.project",
+    "version":  1,
+    "colorSpace":  "sRGB",
+    "documentID":  "0C5E7A91-3B2D-4F6A-8E1C-9D0B7A6F5E4D",
+    "width":  100,
+    "height":  80,
+    "resolution":  72,
+    "activeLayerID":  "6F1D3C2A-0B7E-4E8A-9C4D-2A1B3C4D5E6F",
+    "layers":  [
+                   {
+                       "id":  "6F1D3C2A-0B7E-4E8A-9C4D-2A1B3C4D5E6F",
+                       "name":  "Base",
+                       "isVisible":  true,
+                       "transform":  {
+                                         "origin":  [
+                                                        0,
+                                                        0
+                                                    ],
+                                         "size":  [
+                                                      100,
+                                                      80
+                                                  ],
+                                         "rotation":  0,
+                                         "flipX":  false,
+                                         "flipY":  false,
+                                         "sampling":  "High quality"
+                                     },
+                       "imageFile":  "6F1D3C2A-0B7E-4E8A-9C4D-2A1B3C4D5E6F.png"
+                   }
+               ]
+}

@@ -1,4 +1,4 @@
-﻿# 构建产物
+# 构建产物
 bin/
 obj/
 out/
@@ -10,3 +10,6 @@ TestResults/
 
 # .NET 本地缓存
 *.binlog
+
+# 本地绝对路径覆盖（CompositorCoreProject 等），绝不能进版本库
+Directory.Build.local.props
