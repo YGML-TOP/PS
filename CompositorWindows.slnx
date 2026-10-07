@@ -1,10 +1,22 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Compositor.Core/Compositor.Core.csproj" />
+    <Project Path="src/Compositor.Imaging/Compositor.Imaging.csproj" />
+    <Project Path="src/Compositor.Project/Compositor.Project.csproj" />
+    <Project Path="src/Compositor.History/Compositor.History.csproj" />
     <Project Path="src/Compositor.Selection/Compositor.Selection.csproj" />
+    <Project Path="src/Compositor.Adjust/Compositor.Adjust.csproj" />
+    <Project Path="src/Compositor.UI/Compositor.UI.csproj" />
+    <Project Path="src/Compositor.App/Compositor.App.csproj" />
+    <Project Path="src/Compositor.App.Tests/Compositor.App.Tests.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Compositor.Core.Tests/Compositor.Core.Tests.csproj" />
+    <Project Path="tests/Compositor.Imaging.Tests/Compositor.Imaging.Tests.csproj" />
+    <Project Path="tests/Compositor.Project.Tests/Compositor.Project.Tests.csproj" />
+    <Project Path="tests/Compositor.History.Tests/Compositor.History.Tests.csproj" />
     <Project Path="tests/Compositor.Selection.Tests/Compositor.Selection.Tests.csproj" />
+    <Project Path="tests/Compositor.Adjust.Tests/Compositor.Adjust.Tests.csproj" />
+    <Project Path="tests/Compositor.UI.Tests/Compositor.UI.Tests.csproj" />
   </Folder>
 </Solution>
