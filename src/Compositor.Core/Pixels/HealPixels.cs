@@ -10,8 +10,8 @@ namespace Compositor.Core.Pixels;
 /// 其中 <c>heal_hash</c>、<c>heal_unit</c>、<c>heal_score</c>、<c>heal_solve</c> 在原 C 是
 /// <c>static</c>，这里保持 <c>private</c>。</para>
 ///
-/// <para><b>不变量</b>：<paramref name="rgba"/> 为预乘 RGBA8（4 字节/像素），
-/// <paramref name="stride"/> 为每行字节数且 ≥ width*4；<paramref name="coverage"/> 是
+/// <para><b>不变量</b>：<c>rgba</c> 为预乘 RGBA8（4 字节/像素），
+/// <c>stride</c> 为每行字节数且 ≥ width*4；<c>coverage</c> 是
 /// <c>width * height</c> 紧密排列的灰度（0 表示不修）；工作盒（spot 加 ring，并裁剪到图像内）
 /// 的宽高 ≤ width/height，故所有内部缓冲都在画布范围内。</para>
 ///
@@ -28,7 +28,7 @@ namespace Compositor.Core.Pixels;
 /// <c>long neighbors[4][2]</c> / <c>long offsets[4][2]</c> → 方法外层 <c>stackalloc</c>，
 /// 原 C 在每轮循环重新初始化为 0 的地方，C# 在同一位置显式清零，语义相同。</item>
 /// <item>两处 <c>goto done</c>（<c>!ringCount</c> 与分配失败）改为提前 <c>return</c>。
-/// <c>!ringCount</c> 那一处退出时 <paramref name="rgba"/> 一个字节都还没被写过，
+/// <c>!ringCount</c> 那一处退出时 <c>rgba</c> 一个字节都还没被写过，
 /// 与原 C「置 status=0 → 释放 → return 0」完全等价。</item>
 /// <item>C 的 <c>(uint8_t)lround(v)</c> 一律走 <see cref="CSemantics.U8(double)"/> +
 /// <see cref="CSemantics.LRound(double)"/>：此处表达式已被原 C 的 <c>0/255/t[3]</c> 夹在
@@ -336,7 +336,9 @@ public static class HealPixels
         for (long y = 0; y < wh; ++y)
         {
             prefix[0] = 0;
-            for (long x = 0; x < ww; ++x) prefix[(int)x + 1] = prefix[(int)x] + (role[(int)(y * ww + x)] == Hole);
+            // 原 C 的前缀和用 ptrdiff_t（long），C# 同用 long[]。
+            // C 的 (role[...] == HOLE) 是 int 0/1；C# 的 bool 不能直接加到 long 上，故显式取三元。
+            for (long x = 0; x < ww; ++x) prefix[(int)x + 1] = prefix[(int)x] + (role[(int)(y * ww + x)] == Hole ? 1L : 0L);
             for (long x = 0; x < ww; ++x)
             {
                 long lo = x - ring < 0 ? 0 : x - ring, hi = x + ring + 1 > ww ? ww : x + ring + 1;
@@ -357,7 +359,7 @@ public static class HealPixels
         }
 
         long ringCount = 0;
-        for (long p = 0; p < wn; ++p) ringCount += role[(int)p] == Ring;
+        for (long p = 0; p < wn; ++p) ringCount += (role[(int)p] == Ring ? 1L : 0L);
         if (ringCount == 0) return 0; // 原 C: status = 0; goto done; —— 此时 rgba 一个字节都未被写过。
 
         // Source patch for Content-Aware and Proximity Match.

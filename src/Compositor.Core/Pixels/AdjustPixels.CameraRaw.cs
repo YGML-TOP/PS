@@ -138,14 +138,30 @@ public static partial class AdjustPixels
     /// 把直通 RGB 按 alpha 预乘后写回像素。<b>不写 alpha</b>。
     /// </summary>
     /// <remarks>
-    /// 原 C 的 <c>write_premultiplied</c>。夹到 [0, alpha] 保证了「RGB ≤ alpha」这条预乘不变量，
-    /// 因此<b>凡是要改颜色，就必须走本函数</b>，不要直接写 <c>p[0..2]</c>。
+    /// <para>原 C 的 <c>static void write_premultiplied(uint8_t *p, double r, double g, double b, double alpha)</c>。
+    /// C 里 <c>p</c> 是<b>指向当前像素的指针</b>——调用方在循环里已经做过 <c>rgba + o</c>，
+    /// 所以函数体里写的是 <c>p[0] p[1] p[2]</c>，<b>不带像素起始下标参数</b>。</para>
+    /// <para>C# 禁 <c>unsafe</c>（<c>Directory.Build.props</c> 的 <c>AllowUnsafeBlocks=false</c>），
+    /// 没有指针可用，等价写法是「缓冲 + 像素起始下标」这对参数：<c>Span&lt;byte&gt; rgba</c> 对应
+    /// C 的 <c>uint8_t *</c> 形参本身，<c>int p</c> 对应那个<b>已被加进指针的偏移量</b>。
+    /// 两者合起来正好等价于 <c>&amp;rgba[p]</c>。</para>
+    /// <para>⚠️ <b>签名不是随手定的</b>：C 版形参个数就是 5 个（指针算 1 个），
+    /// 本版也必须是 5 个<b>颜色参数 + 缓冲 + 下标 = 6 个形参</b>，少一个就会把
+    /// <c>alpha</c> 错绑到下标上——这正是初版把它写成 5 参时报的 13 处 CS1503。</para>
+    /// <para>夹到 [0, alpha] 保证了「RGB ≤ alpha」这条预乘不变量，
+    /// 因此<b>凡是要改颜色，就必须走本函数</b>，不要直接写 <c>rgba[p..p+2]</c>。</para>
     /// </remarks>
-    private static void WritePremultiplied(Span<byte> p, double r, double g, double b, double alpha)
+    /// <param name="rgba">预乘 RGBA8 像素缓冲，原地修改。</param>
+    /// <param name="p">当前像素的<b>起始字节下标</b>（等价于 C 的指针 <c>p</c>）。</param>
+    /// <param name="r">直通红（未预乘，0…1 或更宽）。</param>
+    /// <param name="g">直通绿。</param>
+    /// <param name="b">直通蓝。</param>
+    /// <param name="alpha">该像素的覆盖度，即 <c>rgba[p+3]</c> 的值。</param>
+    private static void WritePremultiplied(Span<byte> rgba, int p, double r, double g, double b, double alpha)
     {
-        p[0] = (byte)Math.Min(alpha, Math.Max(0.0, CSemantics.Round(r * alpha)));
-        p[1] = (byte)Math.Min(alpha, Math.Max(0.0, CSemantics.Round(g * alpha)));
-        p[2] = (byte)Math.Min(alpha, Math.Max(0.0, CSemantics.Round(b * alpha)));
+        rgba[p] = (byte)Math.Min(alpha, Math.Max(0.0, CSemantics.Round(r * alpha)));
+        rgba[p + 1] = (byte)Math.Min(alpha, Math.Max(0.0, CSemantics.Round(g * alpha)));
+        rgba[p + 2] = (byte)Math.Min(alpha, Math.Max(0.0, CSemantics.Round(b * alpha)));
     }
 
     // ══════════════════════ 基础调色（Light & Color）══════════════════════
@@ -240,7 +256,7 @@ public static partial class AdjustPixels
                     }
                 }
 
-                WritePremultiplied(p, r, g, b, alpha);
+                WritePremultiplied(rgba, p, r, g, b, alpha);
             }
         }
     }
@@ -285,7 +301,7 @@ public static partial class AdjustPixels
                     r = r * 0.35 + 0.65; g *= 0.35; b *= 0.35;
                 }
 
-                WritePremultiplied(p, r, g, b, alpha);
+                WritePremultiplied(rgba, p, r, g, b, alpha);
             }
         }
     }

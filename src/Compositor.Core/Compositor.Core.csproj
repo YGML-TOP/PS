@@ -3,8 +3,18 @@
   <PropertyGroup>
     <RootNamespace>Compositor.Core</RootNamespace>
     <AssemblyName>Compositor.Core</AssemblyName>
-    <!-- 未完成 XML 注释的类型用 NoWarn 局部豁免，公开契约类型仍强制要求注释。 -->
+    <!-- ⚠️ NoWarn 是<b>整个项目</b>生效的，不存在「公开契约类型例外」这回事（初版注释这么写是错的）。
+         加它是因为 GetDitherParams / DitherParams 这类承载 C 结构体布局的内部类型暂未逐成员补注释，
+         而 GenerateDocumentationFile=true + TreatWarningsAsErrors=true 会让每一个无注释的 public 成员直接编译失败。
+         因此真正约束「注释必须齐全」的不是编译器，而是 scripts\check-xmldoc.ps1 的标签配平检查。 -->
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- CSemantics 承载 C 的舍入与窄化转换语义，是整套直译对齐黄金样本的前提，
+         最该被直接单元测试。但它是 internal，测试程序集够不着。
+         这条把它开放给测试项目——只开放 internal，不放宽 public API 边界。 -->
+    <InternalsVisibleTo Include="Compositor.Core.Tests" />
+  </ItemGroup>
 
 </Project>

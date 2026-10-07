@@ -4,8 +4,8 @@ namespace Compositor.Core.Pixels;
 /// <remarks>
 /// <para><b>对应 C 函数</b>：<c>void lens_distort(const uint8_t *source, uint8_t *destination,
 /// size_t width, size_t height, size_t stride, double k)</c></para>
-/// <para><b>不变量</b>：<paramref name="destination"/> 按预乘 RGBA8 存储，<paramref name="stride"/>
-/// 为每行字节数且 ≥ width*4；<paramref name="source"/> 与 <paramref name="destination"/> 可以是同一块缓冲
+/// <para><b>不变量</b>：<c>destination</c> 按预乘 RGBA8 存储，<c>stride</c>
+/// 为每行字节数且 ≥ width*4；<c>source</c> 与 <c>destination</c> 可以是同一块缓冲
 /// （逐行读逐行写，行内已先算完所有累加再写回，故原位安全）。</para>
 /// <para><b>与原 C 的等价改写</b>：仅 <c>size_t</c> 索引改 <c>int</c>；<c>double sums[4]</c> 改四个局部变量
 /// （C 的数组每轮重新初始化为 0，四个局部变量的初值语义相同）；末行 <c>(uint8_t)lround(...)</c> 走

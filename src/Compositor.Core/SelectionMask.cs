@@ -1,0 +1,93 @@
+namespace Compositor.Core;
+
+/// <summary>
+/// 选区。M0 只定义数据结构；<b>算法归 AI-4</b>。
+/// </summary>
+/// <remarks>
+/// 契约给出的成员只有构造入口（<see cref="Empty"/> / <see cref="Full"/>）与查询入口
+/// （<see cref="CoverageAt"/>）。<b>波次 1 刻意不提供"从覆盖率数据构造"的公开方法</b>：
+/// 怎么把一条路径变成覆盖度（魔棒、套索、色彩范围）是 AI-4 的算法，不是契约。
+/// 需要时由 AI-4 在自己的目录里扩展，或走评审流程加进本类型。
+/// </remarks>
+public sealed class SelectionMask
+{
+    private SelectionMask(DocRect bounds, Coverage8 coverage)
+    {
+        Bounds = bounds;
+        Coverage = coverage;
+    }
+
+    /// <summary>选区的外接矩形，位于文档坐标系。空选区为 <see cref="DocRect.Empty"/>。</summary>
+    public DocRect Bounds { get; }
+
+    /// <summary>选区内的 8-bit 覆盖度数据。</summary>
+    public Coverage8 Coverage { get; }
+
+    /// <summary>
+    /// 选区是否为空。
+    /// </summary>
+    /// <remarks>
+    /// 🔴 <b>本项在契约中未定义，此处按下述口径实现，属于我替契约补的判断，需要评审确认。</b>
+    /// <para>口径：<c>IsEmpty ⇔ Bounds.IsEmpty</c>，即"外接矩形宽或高为 0"。</para>
+    /// <para>为什么不用"覆盖度全为 0"：那需要每次访问都 O(像素数) 扫描，
+    /// 而 <c>IsEmpty</c> 是会被每帧调用的属性。更重要的是"有边界但零覆盖"
+    /// 在语义上是<b>有效</b>的选区 —— 用户确实圈了一个形状出来，只是它当前不遮蔽任何像素；
+    /// 把它当成空会让 UI 误判"没有选区"，从而丢掉用户的操作意图。</para>
+    /// <para>若后续评审认为需要更严格的定义，应改成一个显式的方法而不是属性，
+    /// 以免把 O(n) 扫描藏进一个看似廉价的属性访问里。</para>
+    /// </remarks>
+    public bool IsEmpty => Bounds.IsEmpty;
+
+    /// <summary>空选区：无边界、零覆盖。</summary>
+    public static SelectionMask Empty { get; } =
+        new(DocRect.Empty, Coverage8.Uniform(0));
+
+    /// <summary>覆盖整个文档的满选区。</summary>
+    /// <param name="size">文档尺寸。宽或高 ≤ 0 时返回 <see cref="Empty"/>。</param>
+    /// <returns>覆盖度为 255 的选区。</returns>
+    /// <remarks>
+    /// 用 <see cref="Coverage8.Uniform"/> 而不是全分辨率分配：满选区在图层面板里
+    /// 是最常见的初始状态，为它分配 4K 缓冲是纯浪费。
+    /// </remarks>
+    public static SelectionMask Full(DocSize size)
+    {
+        if (size.Width <= 0 || size.Height <= 0)
+        {
+            return Empty;
+        }
+
+        return new SelectionMask(new DocRect(new DocPoint(0, 0), size), Coverage8.Uniform(255));
+    }
+
+    /// <summary>取值 0..255，区域外为 0。</summary>
+    /// <param name="p">文档坐标系中的点，Y 向下（铁律 1）。</param>
+    /// <returns>该点的覆盖度；点在 <see cref="Bounds"/> 外时返回 0。</returns>
+    /// <remarks>
+    /// 这是<b>访问覆盖度的唯一正确入口</b>：它同时处理了两种表示
+    /// （1×1 均匀代理与全分辨率缓冲），并把文档坐标换算到覆盖度缓冲的局部坐标。
+    /// 直接索引 <see cref="Coverage8.Data"/> 既会漏掉均匀代理，又容易把 Y 写反。
+    /// </remarks>
+    public byte CoverageAt(DocPoint p)
+    {
+        if (!Bounds.Contains(p))
+        {
+            return 0;
+        }
+
+        if (Coverage.IsUniform)
+        {
+            return Coverage.Data[0];
+        }
+
+        // 文档坐标 → 覆盖度缓冲局部坐标。Bounds 是半开区间，Contains 已保证在界内，
+        // 这里仍要钳一次：浮点坐标落在右/下边界附近时，(int) 截断可能等于 Width/Height。
+        int ix = (int)(p.X - Bounds.Left);
+        int iy = (int)(p.Y - Bounds.Top);
+        if (ix < 0 || iy < 0 || ix >= Coverage.Width || iy >= Coverage.Height)
+        {
+            return 0;
+        }
+
+        return Coverage.Data[iy * Coverage.Width + ix];
+    }
+}

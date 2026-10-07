@@ -210,7 +210,7 @@ public readonly ref struct DitherParams
 /// <c>lroundf</c> → <see cref="CSemantics.LRoundF"/>，<c>(uint8_t)</c> → <see cref="CSemantics.U8F(float)"/>。</item>
 /// <item>字面量一律原样：<c>3.14159265f</c>（截断的 π，<b>不是</b> <c>MathF.PI</c>）、
 /// <c>0.2126f/0.7152f/0.0722f</c>、<c>255.0f</c>、<c>0.5f</c>、<c>1.35f</c>、
-/// <c>0.42f</c>、<c>0.45f/1.7f/1.3f/0.7f/0.3f</c> 等；<c>exp2f</c> → <see cref="MathF.Exp2(float)"/>。</item>
+/// <c>0.42f</c>、<c>0.45f/1.7f/1.3f/0.7f/0.3f</c> 等；<c>exp2f</c> → <see cref="CSemantics.Exp2F"/>（.NET 没有 <c>MathF.Exp2</c>）。</item>
 /// <item>C 中 double→float 的隐式窄化（<c>detail</c>、<c>sqrt</c> 等）补显式 <c>(float)</c>，
 /// 取同一个值。</item>
 /// </list></para>
@@ -476,7 +476,7 @@ public static class DitherPixels
         // 原 C 在 !originalColors 时 source 为 NULL 且从不解引用，这里用空数组代替 null。
         float[] source = p.OriginalColors != 0 ? new float[count * 3] : Array.Empty<float>();
 
-        float gamma = MathF.Exp2(p.Density * 1.5f);
+        float gamma = CSemantics.Exp2F(p.Density * 1.5f);
         float contrast = p.Contrast >= 0 ? 1.0f / (1.0f - 0.95f * p.Contrast) : 1.0f + p.Contrast;
 
         // 原 C 的 in_bands(height, ...)：bands = height < 64 ? 1 : 32，size 向上取整。
@@ -644,7 +644,7 @@ public static class DitherPixels
                             if (alpha[y * width + x] == 0) continue;
 
                             // Dots: the line breaks into beads, one every line spacing, each lit in the color at its middle.
-                            float along = MathF.Fmod(x + 0.5f, spacing) - middle;
+                            float along = CSemantics.FModF(x + 0.5f, spacing) - middle;
                             long centered = CSemantics.LRoundF(x - along * dots);
                             int at = centered < 0 ? 0 : centered >= width ? width - 1 : (int)centered;
                             float r, g, b, t;

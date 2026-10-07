@@ -20,7 +20,7 @@ namespace Compositor.Core.Pixels;
 ///   <c>if (!failed &amp;&amp; clarity != 0)</c> 简化为 <c>if (clarity != 0)</c>。
 ///   理由：正常路径上 <c>box_blur_plane</c> 恒返回 1，<c>failed</c> 恒为 0，
 ///   因此删除这些分支后逐位等价。C 版的分配失败是一次「整张图不处理」的静默降级，
-///   在 .NET 里改由 <c>OutOfMemoryException</c> 表达，不再需要人为吞掉。</item>
+///   在 .NET 里改由 <c>OutOfMemoryException</c> 表达，不再需要人为吞掉。</b></item>
 ///   <item><c>float *luma = NULL</c> 一类指针 → <c>float[]? luma = null</c>；
 ///   C 的指针真值判断 <c>if (fine || coarse)</c> → <c>if (fine != null || coarse != null)</c>。
 ///   「某效果为 0 ⇒ 对应缓冲保持 null ⇒ 该分支不参与运算」这条语义在 C# 中靠 null 检查原样保留。</item>
@@ -153,7 +153,7 @@ public static partial class AdjustPixels
     /// 暗角在 <paramref name="px"/>, <paramref name="py"/> 处的强度：画面中心为 0，越过边缘到 1。
     /// </summary>
     /// <remarks>
-    /// 对应 <c>vignette_mask_at</c>。形状在<b>方形</b>（<c>max(|nx|,|ny|)</c>）与<b>圆形</c>
+    /// 对应 <c>vignette_mask_at</c>。形状在<b>方形</b>（<c>max(|nx|,|ny|)</c>）与<b>圆形</b>
     /// （<c>hypot/sqrt(2)</c>）之间插值，<paramref name="roundness"/> 就是这个插值系数：
     /// 0 = 圆，100 = 方。<paramref name="feather"/> 有 0.05 的下限，
     /// 保证 <c>t</c> 的除数不为 0（羽化 0 会让整圈边缘变成硬切）。
@@ -165,7 +165,7 @@ public static partial class AdjustPixels
         double nx = px / width * 2.0 - 1.0;
         double ny = py / height * 2.0 - 1.0;
         double square = Math.Max(Math.Abs(nx), Math.Abs(ny));
-        double circle = Math.Hypot(nx, ny) / Math.Sqrt(2.0);
+        double circle = CSemantics.Hypot(nx, ny) / Math.Sqrt(2.0);
         double shape = (1.0 - roundness / 100.0) * 0.5;
         double dist = circle + (square - circle) * shape;
         double start = (midpoint / 100.0) * 0.85;
@@ -293,7 +293,7 @@ public static partial class AdjustPixels
                 if (fillsClear == 0)
                 {
                     // Only the pixels that are there change color; their coverage stays as it was.
-                    WritePremultiplied(p, r + (red - r) * effect, g + (green - g) * effect, b + (blue - b) * effect, rgba[p + 3]);
+                    WritePremultiplied(rgba, p, r + (red - r) * effect, g + (green - g) * effect, b + (blue - b) * effect, rgba[p + 3]);
                     continue;
                 }
                 // The color painted over the pixel at `effect`: an opaque pixel moves toward it, a clear one takes it on.
@@ -303,7 +303,7 @@ public static partial class AdjustPixels
                 g = (green * effect + g * alpha * (1.0 - effect)) / outA;
                 b = (blue * effect + b * alpha * (1.0 - effect)) / outA;
                 rgba[p + 3] = (byte)Math.Min(255.0, CSemantics.Round(outA * 255.0));
-                WritePremultiplied(p, r, g, b, rgba[p + 3]);
+                WritePremultiplied(rgba, p, r, g, b, rgba[p + 3]);
             }
         }
     }
@@ -460,7 +460,7 @@ public static partial class AdjustPixels
                 }
                 EffectsVignette(ref r, ref g, ref b, x, y, width, height, vignetteAmount, vignetteMidpoint,
                     vignetteRoundness, vignetteFeather, vignetteHighlights, vignetteStyle);
-                WritePremultiplied(p, r, g, b, alpha);
+                WritePremultiplied(rgba, p, r, g, b, alpha);
             }
         }
     }
@@ -530,7 +530,7 @@ public static partial class AdjustPixels
                                  highlights * highlightWeight) / 100.0;
                 double detail = lum - baseLum;
                 double delta = 0.18 * Math.Tanh(detail * 6.0) * weight * strength * (4.0 * lum * (1.0 - lum));
-                WritePremultiplied(p, CameraClamp(r + delta), CameraClamp(g + delta),
+                WritePremultiplied(rgba, p, CameraClamp(r + delta), CameraClamp(g + delta),
                     CameraClamp(b + delta), alpha);
             }
         }

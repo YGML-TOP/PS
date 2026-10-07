@@ -142,19 +142,23 @@ public sealed class TranslationTests
         var mono = new byte[stride * h];
         var color = new byte[stride * h];
         for (int i = 0; i < mono.Length; i += 4) { mono[i] = mono[i + 1] = mono[i + 2] = 128; mono[i + 3] = 255; }
-        color.AsSpan().CopyFrom(mono);
+        mono.AsSpan().CopyTo(color);
 
         NoisePixels.Add(mono, w, h, stride, 50f, 0, 1, 4242u);
         NoisePixels.Add(color, w, h, stride, 50f, 0, 0, 4242u);
 
-        int monoSpread = 0, colorSpread = 0;
+        // C: uint32_t key = monochromatic ? base : base + c * 0x9e3779b9U;
+        // 单色模式三通道拿到**同一个** n ⇒ 等价于整像素同幅偏移 ⇒ 三通道依然相等。
+        // 彩色模式下 c=0 的 key = base + 0 = base，与单色模式逐位相同——
+        // 所以<b>不能</b>拿"两张图的同一通道"比离散度（那样恒相等），要比"一张图内的三通道差"。
+        bool colorChannelsDiffer = false;
         for (int i = 0; i < mono.Length; i += 4)
         {
-            monoSpread = Math.Max(monoSpread, Math.Abs(mono[i] - 128));
-            colorSpread = Math.Max(colorSpread, Math.Abs(color[i] - 128));
+            Assert.Equal(0, mono[i] - mono[i + 1]);     // 输入是 (128,128,128)，偏移相同则差恒为 0
+            Assert.Equal(0, mono[i + 1] - mono[i + 2]);
+            if (color[i] - color[i + 1] != 0 || color[i + 1] - color[i + 2] != 0) colorChannelsDiffer = true;
         }
-        // 单色模式的通道间离散度必须小于彩色模式，否则说明 monochromatic 分支没生效
-        Assert.True(monoSpread < colorSpread, $"mono={monoSpread} color={colorSpread}");
+        Assert.True(colorChannelsDiffer, "彩色模式下三通道的噪声应当互不相同");
     }
 
     /// <summary>输出 alpha 必须不变（只动 RGB）。</summary>
@@ -302,7 +306,15 @@ public sealed class TranslationTests
 
     // ────────────────────────────── LevelsPixels ──────────────────────────────
 
-    /// <summary>恒等 LUT（table[i]=i）在不透明像素上必须近似恒等（±1 舍入）。</summary>
+    /// <summary>恒等 LUT（table[i]=i/255）在不透明像素上必须近似恒等（±1 舍入）。</summary>
+    /// <remarks>
+    /// 🔴 <b>LUT 是 0…1 归一化量纲，不是 0…255。</b> 三个 Swift 调用方都按这个量纲构造表：
+    /// <c>Levels.swift:69</c> <c>Float(apply(Double($0)/255, channel:))</c>、
+    /// <c>Curves.swift:37</c> <c>value(...)/255</c>、
+    /// <c>ImageAdjustments.swift:61</c> 返回 <c>min(1, max(0, output))</c>。
+    /// 根因在 C 写的是 <c>fminf(alpha, roundf(result*alpha))</c> —— 只有 <c>result</c> 在 0…1 时这个式子才成立。
+    /// 初版误填 <c>tables[i] = i</c>（大了 255 倍），整片饱和到 255，差点被当成实现 bug 去改直译。
+    /// </remarks>
     [Fact]
     public void LevelsApply_IdentityTable_IsNearIdentity()
     {
@@ -312,13 +324,13 @@ public sealed class TranslationTests
         {
             buf[i * 4] = (byte)(i * 13);
             buf[i * 4 + 1] = (byte)(i * 7);
-            buf[i * 4 + 2] = (byte)(i * 29);
+            buf[i * 4 + 2] = (byte)(i * 29 % 256); // i 最大 15 → 435，必须显式取模才是"期望值"
             buf[i * 4 + 3] = 255;
         }
 
         var tables = new float[768];
         for (int ch = 0; ch < 3; ch++)
-            for (int i = 0; i < 256; i++) tables[ch * 256 + i] = i;
+            for (int i = 0; i < 256; i++) tables[ch * 256 + i] = i / 255.0f; // 0…1 量纲
 
         LevelsPixels.Apply(buf, count, tables);
 
@@ -326,7 +338,7 @@ public sealed class TranslationTests
         {
             Assert.InRange(Math.Abs(buf[i * 4] - (byte)(i * 13)), 0, 1);
             Assert.InRange(Math.Abs(buf[i * 4 + 1] - (byte)(i * 7)), 0, 1);
-            Assert.InRange(Math.Abs(buf[i * 4 + 2] - (byte)(i * 29)), 0, 1);
+            Assert.InRange(Math.Abs(buf[i * 4 + 2] - (byte)(i * 29 % 256)), 0, 1);
         }
     }
 
@@ -359,7 +371,30 @@ public sealed class TranslationTests
         Assert.Equal(1.0, bins[256 + 255], 6); // R
         Assert.Equal(1.0, bins[512 + 255], 6); // G
         Assert.Equal(1.0, bins[768 + 255], 6); // B
-        Assert.Equal(1.0 / 3.0, bins[255], 3); // 亮度 bin 另叠加三通道各 1/3
+    }
+
+    /// <summary>亮度 bin 是<b>每通道各加 1/3</b>，不是加一整个 weight。</summary>
+    /// <remarks>
+    /// C 的 <c>levels_histogram</c> 循环体：
+    /// <c>bins[(channel+1)*256+value] += weight; bins[value] += weight/3.0;</c>。
+    /// 白色像素三通道的 value 都是 255，所以 <c>bins[255]</c> 收到 3 × 1/3 = 1，
+    /// <b>与"加一次整个 weight"不可区分</b>——要证伪必须用三通道取值不同的像素，
+    /// 让 1/3 分别落到三个不同的 bin 上。
+    /// </remarks>
+    [Fact]
+    public void Histogram_LuminanceBin_ReceivesOneThirdPerChannel()
+    {
+        var px = new byte[] { 10, 20, 30, 255 };
+        var bins = new double[1024];
+
+        LevelsPixels.Histogram(px, default, 1, bins);
+
+        Assert.Equal(1.0 / 3.0, bins[10], 6);     // 只来自 R 通道的那 1/3
+        Assert.Equal(1.0 / 3.0, bins[20], 6);     // 只来自 G 通道的那 1/3
+        Assert.Equal(1.0 / 3.0, bins[30], 6);     // 只来自 B 通道的那 1/3
+        Assert.Equal(1.0, bins[256 + 10], 6);    // R bin 收整个 weight
+        Assert.Equal(1.0, bins[512 + 20], 6);
+        Assert.Equal(1.0, bins[768 + 30], 6);
     }
 
     [Fact]
