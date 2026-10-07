@@ -186,4 +186,54 @@ public class DistanceOpsTests
 
         Assert.False(contracted.HasContent());
     }
+
+    /// <summary>
+    /// 【推导 · 独立断言】收缩的判据必须是「到<b>未选中</b>像素的距离 &gt; amount」，
+    /// 而不是「到已选中像素的距离 &gt; amount」。
+    /// </summary>
+    /// <remarks>
+    /// 这是本模块历史上真实踩过的 bug：把判据写反之后，实心区域的每个像素<b>自己就是参考点</b>、
+    /// 距离恒为 0，<c>0 &gt; 1</c> 为假，整个选区会被整体抹光。
+    /// <para><b>手算</b>：3×3 实心块位于 (10,10)–(12,12)，坐标覆盖 x,y ∈ {10,11,12}。收缩 1 像素。</para>
+    /// <list type="bullet">
+    /// <item><description>
+    /// 角点 (10,10)：最近的未选中像素是 (9,10)，距离 1。<c>1 &gt; 1</c> 为假 → <b>抹掉</b>。
+    /// </description></item>
+    /// <item><description>
+    /// 边中点 (10,11)：最近的未选中像素是 (9,11)，距离 1 → <b>抹掉</b>。
+    /// </description></item>
+    /// <item><description>
+    /// 中心 (11,11)：最近的未选中像素是 (9,11) 或 (11,9)，距离 2。<c>2 &gt; 1</c> 为真 → <b>保留</b>。
+    /// </description></item>
+    /// </list>
+    /// 所以正确结果<b>恰好只剩中心一个像素</b>。
+    /// <para>
+    /// <b>为什么这条能钉死语义方向</b>：若判据取反成「到已选中像素的距离 &gt; 1」，
+    /// 块内所有像素距离都是 0 而被抹光，而块<b>外</b>那些距块 ≥ 2 的像素反而会被保留 ——
+    /// 结果是一圈<b>光晕</b>长在原方块外面，与期望的「只剩中心」截然不同。
+    /// 这条断言对两种实现给出的结果毫无重叠。
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void ContractKeepsOnlyPixelsFartherThanAmountFromUnselected()
+    {
+        var block = Box(10, 10, 3, 3);
+
+        var contracted = DistanceOps.Contract(block, 1);
+
+        // 中心：距最近未选中像素 2 > 1，保留。
+        Assert.Equal(255, Coverage(contracted, 11, 11));
+
+        // 四角与四边中点：距最近未选中像素恰为 1，不 > 1，全部抹掉。
+        foreach (var (x, y) in new[] { (10, 10), (11, 10), (12, 10), (10, 11), (12, 11), (10, 12), (11, 12), (12, 12) })
+        {
+            Assert.Equal(0, Coverage(contracted, x, y));
+        }
+
+        // 判据取反时会冒出来的「光晕」：原方块外侧一个像素都不该有。
+        Assert.Equal(0, Coverage(contracted, 9, 11));
+        Assert.Equal(0, Coverage(contracted, 13, 11));
+        Assert.Equal(0, Coverage(contracted, 11, 9));
+        Assert.Equal(0, Coverage(contracted, 11, 13));
+    }
 }
