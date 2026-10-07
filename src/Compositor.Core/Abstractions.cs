@@ -160,7 +160,44 @@ public interface IDocument
 
     /// <summary>一切写操作的唯一入口。保证所有写操作可撤销（AI-3 依赖此约定）。</summary>
     /// <param name="tx">要执行的事务。</param>
+    /// <remarks>
+    /// 🔴 <b>本成员的 <c>tx</c> 语义在 v1.1 是不完整的，已登记待澄清。</b>
+    /// <c>DocumentMutation</c> 是纯抽象类（只有 <see cref="DocumentMutation.Apply"/> /
+    /// <see cref="DocumentMutation.Revert"/>），没有工厂也没有记录器，
+    /// 所以 <c>tx</c> 回调拿到的实例<b>无法构造、无法填充、也无法交回去</b>
+    /// （<c>Action&lt;T&gt;</c> 没有返回值通道）。
+    /// 报告给总管后，v1.2 以 <see cref="MutateAll"/> 补上了一条语义明确的入口。
+    /// </remarks>
     void Mutate(Action<DocumentMutation> tx);
+
+    /// <summary>
+    /// 🔴 <b>契约 v1.2 新增：一次性提交多个 mutation，合并为一个 undo 步骤。</b>
+    /// </summary>
+    /// <param name="mutations">要依次施加的变更，顺序即施加顺序。</param>
+    /// <remarks>
+    /// <para><b>为什么不在 <see cref="DocumentMutation"/> 上加 Label / 分组。</b>
+    /// AI-3 最初想加的是「Label」与「把多个变更包成一个」。
+    /// 那被明确驳回了，理由是<b>两层概念不能混</b>：
+    /// <list type="bullet">
+    /// <item><see cref="DocumentMutation"/> 的语义是「<b>一个</b>可逆变更」，
+    /// <see cref="DocumentMutation.Apply"/> 精确改变一件事、
+    /// <see cref="DocumentMutation.Revert"/> 精确逆转它。</item>
+    /// <item>「<b>一次用户操作</b>」是若干个变更的<b>组合</b>，命名（Label）与撤销栈的组织
+    /// 属于<b>上层 history entry</b>，对应 Mac 的 <c>DocumentHistory.swift</c> 快照式栈。</item>
+    /// </list>
+    /// 把 Label 塞进 mutation 会让「一个变更」与「一次编辑」在类型上无法区分，
+    /// 反过来污染 AI-3 自己要写的历史模块。分组能力因此只落在<b>本方法</b>这一个入口上。</para>
+    ///
+    /// <para><b>事务性契约（实现方必须遵守）</b>：
+    /// 任一 <see cref="DocumentMutation.Apply"/> 抛异常时，
+    /// <b>已成功施加的那些必须按逆序 <see cref="DocumentMutation.Revert"/></b>，
+    /// 然后把原异常继续抛给调用方。这一条是正确性要求而非风格问题 ——
+    /// 后施加的变更依赖先施加的结果，不逆序撤销会留下不一致状态，
+    /// 而这种不一致通常不会立刻显形，只会在之后某个无关操作时炸开。</para>
+    ///
+    /// <para><b>空数组是合法的 no-op</b>，不得抛异常。</para>
+    /// </remarks>
+    void MutateAll(params DocumentMutation[] mutations);
 
     /// <summary>当前选区。无选区时为 <see langword="null"/>。</summary>
     SelectionMask? Selection { get; }
@@ -213,6 +250,77 @@ public sealed record ProjectSnapshot
 
     /// <summary>当前活动图层 id。</summary>
     public Guid? ActiveLayerId { get; init; }
+
+    /// <summary>🔴 <b>契约 v1.2 新增</b>：图层像素，键为 <see cref="LayerNode.Id"/>。</summary>
+    /// <remarks>
+    /// 默认空字典而非 <see langword="null"/>：调用方可以直接遍历而不必判空。
+    /// 这里的值只可能是 <see cref="ProjectPixelFormat.PremultipliedRgba8"/>
+    /// （图层像素带 alpha，必然是 RGBA）。
+    /// </remarks>
+    public IReadOnlyDictionary<Guid, IProjectAsset> Images { get; init; }
+        = new Dictionary<Guid, IProjectAsset>();
+
+    /// <summary>🔴 <b>契约 v1.2 新增</b>：蒙版像素，键为 <see cref="LayerNode.Id"/>。</summary>
+    /// <remarks>
+    /// 默认空字典。<b>这里只接受 <see cref="ProjectPixelFormat.Gray8"/></b>——
+    /// 依据 Mac 的 <c>Document/LayerMask.swift:23-26</c>：
+    /// 蒙版必须是 monochrome + 8bpc + <c>alphaInfo == .none</c>（无 alpha 通道）。
+    /// 这条约束正是驳回「只带 PNG 字节」那种形状的理由：
+    /// PNG 字节是黑盒，Core 层无从校验，<c>save</c> 时必然出现
+    /// 「写进去了但下次 <c>load</c> 拒收」的不对称。
+    /// </remarks>
+    public IReadOnlyDictionary<Guid, IProjectAsset> Masks { get; init; }
+        = new Dictionary<Guid, IProjectAsset>();
+}
+
+/// <summary><c>.comp</c> 包内一项资产的像素格式。🔴 <b>契约 v1.2 新增</b>。</summary>
+/// <remarks>
+/// <b>枚举值序号参与 <c>.comp</c> 序列化</b>（0 与 1），改动会让已存的工程读不出来。
+/// 新增格式只能追加到末尾，不能插入。
+/// </remarks>
+public enum ProjectPixelFormat
+{
+    /// <summary>预乘 RGBA，每像素 4 字节。铁律 2：alpha 全程预乘。</summary>
+    PremultipliedRgba8 = 0,
+
+    /// <summary>
+    /// 8 位灰度，每像素 1 字节，<b>无 alpha 通道</b>。仅蒙版可用。
+    /// </summary>
+    /// <remarks>
+    /// 依据 Mac 的 <c>Document/LayerMask.swift:23-26</c>（monochrome + 8bpc + <c>alphaInfo == .none</c>）。
+    /// 🔴 与铁律 2 的关系：铁律 2 说的是<b>蒙版不含 alpha</b>，
+    /// 不是「蒙版可以是 RGBA」—— 单通道灰度正是铁律 2 的直接产物。
+    /// </remarks>
+    Gray8 = 1,
+}
+
+/// <summary><c>.comp</c> 包内一项资产（图层像素或蒙版）。纯字节，<b>Core 不引入任何图像库</b>。</summary>
+/// <remarks>
+/// 🔴 <b>契约 v1.2 新增。</b>驳回 AI-2 建议的 <c>byte[] PngBytes</c> 形状，理由有二：
+/// <list type="number">
+/// <item><b>load 边界上无意义</b>。Mac 的 <c>load</c>（<c>ProjectStore.swift:168-191</c>）返回的是
+/// <b>解码后</b>的图像；契约层若只带 PNG 字节，调用方拿到结果还要再解一次码，
+/// 等于把「读文件」和「解码」绕一圈。</item>
+/// <item><b>蒙版格式约束丢失</b>。见 <see cref="ProjectPixelFormat.Gray8"/> 的说明。</item>
+/// </list>
+/// <para><b>本接口只有形状，没有提供实现</b>——契约层只定义「一项资产长什么样」，
+/// 谁来构造（解码路径、测试替身）由各层自行决定。</para>
+/// </remarks>
+public interface IProjectAsset
+{
+    /// <summary>资产宽度，单位像素。</summary>
+    int Width { get; }
+
+    /// <summary>资产高度，单位像素。</summary>
+    int Height { get; }
+
+    /// <summary>逐像素格式，决定 <see cref="Pixels"/> 的字节步长与含义。</summary>
+    ProjectPixelFormat Format { get; }
+
+    /// <summary>
+    /// 逐像素数据。长度 = <c>Width * Height * (Format == Gray8 ? 1 : 4)</c>，行优先，无对齐填充。
+    /// </summary>
+    ReadOnlyMemory<byte> Pixels { get; }
 }
 
 /// <summary>什么都不做的工程存储：记录调用不崩溃。波次 3 的五个功能 AI 靠它并行开工。</summary>
@@ -242,6 +350,74 @@ public sealed class NullProjectStore : IProjectStore
     /// <remarks>立即完成，<b>不产生任何磁盘写入</b>。</remarks>
     public Task SaveAsync(ProjectSnapshot s, string p, CancellationToken ct = default)
         => Task.CompletedTask;
+}
+
+/// <summary>什么都不做的文档：记录调用不崩溃。波次 3 的功能 AI 靠它并行开工。</summary>
+/// <remarks>
+/// 🔴 这是<b>并行度的前提</b>，不是占位符，与 <see cref="NullCanvas"/> / <see cref="NullProjectStore"/> 同理：
+/// <list type="bullet">
+/// <item><see cref="Layers"/> 恒为空列表。</item>
+/// <item><see cref="Selection"/> 恒为 <see langword="null"/>（"没有选区"）。</item>
+/// <item><see cref="Changed"/> <b>永不触发</b>——没有状态可改。</item>
+/// <item><see cref="Mutate"/> 与 <see cref="MutateAll"/> 都是<b>空实现</b>，
+/// <b>不施加任何 mutation</b>。这一点必须写清楚：Null 文档的「不崩溃」不等于「会执行」，
+/// 下游若在测试里提交 mutation 后指望文档状态改变，那是对 Null 实现的误解。</item>
+/// </list>
+/// </remarks>
+public sealed class NullDocument : IDocument
+{
+    /// <summary>用一个给定尺寸创建 Null 文档。</summary>
+    /// <param name="size">文档尺寸。</param>
+    public NullDocument(DocSize size)
+        : this(size, new NullCanvas(size))
+    {
+    }
+
+    /// <summary>用一个给定尺寸与给定画布创建 Null 文档。</summary>
+    /// <param name="size">文档尺寸。</param>
+    /// <param name="canvas">对外暴露的画布。</param>
+    /// <exception cref="ArgumentNullException"><paramref name="canvas"/> 为 <see langword="null"/>。</exception>
+    public NullDocument(DocSize size, ICanvas canvas)
+    {
+        ArgumentNullException.ThrowIfNull(canvas);
+        Size = size;
+        Canvas = canvas;
+    }
+
+    /// <inheritdoc cref="IDocument.Size"/>
+    public DocSize Size { get; }
+
+    /// <inheritdoc cref="IDocument.Canvas"/>
+    public ICanvas Canvas { get; }
+
+    /// <inheritdoc cref="IDocument.Layers"/>
+    /// <returns>恒为空列表。</returns>
+    public IReadOnlyList<LayerNode> Layers { get; } = Array.Empty<LayerNode>();
+
+    /// <inheritdoc cref="IDocument.Selection"/>
+    /// <returns>恒为 <see langword="null"/>。</returns>
+    public SelectionMask? Selection => null;
+
+    /// <inheritdoc cref="IDocument.Changed"/>
+    /// <remarks>Null 实现没有状态可改，此事件<b>永不触发</b>。</remarks>
+#pragma warning disable CS0067 // 事件已实现但从不触发——这是 Null 实现的定义行为，不是遗漏。
+    public event Action<DocRect>? Changed;
+#pragma warning restore CS0067
+
+    /// <inheritdoc cref="IDocument.Mutate"/>
+    /// <remarks>空实现：<b>什么都不做</b>，也不调用 <paramref name="tx"/>。</remarks>
+    public void Mutate(Action<DocumentMutation> tx)
+    {
+        // 刻意不调用 tx：Null 文档没有可施加变更的对象，
+        // 让回调跑一遍反而会制造「操作生效了」的错觉。
+    }
+
+    /// <inheritdoc cref="IDocument.MutateAll"/>
+    /// <remarks>空实现：<b>不施加任何 mutation</b>，空数组亦然（不抛）。</remarks>
+    public void MutateAll(params DocumentMutation[] mutations)
+    {
+        // 与 Mutate 同理：连 Apply 都不调用。
+    }
 }
 
 /// <summary>

@@ -392,11 +392,16 @@ public sealed class SelectionAndNullTests
     }
 
     /// <summary>宽或高非正 → <see cref="ArgumentOutOfRangeException"/>，与 <c>CreateFilled</c> 口径一致。</summary>
+    /// <remarks>
+    /// ⚠️ <paramref name="paramName"/> 期望的是 <c>width</c> / <c>height</c> 而<b>不是</b> <c>w</c> / <c>h</c>：
+    /// 契约 v1.2 把 <c>FromData</c> 的形参名定成了 <c>width</c> / <c>height</c>，
+    /// <c>nameof(...)</c> 取的自然是新名字。两者不一致会让命名实参的调用方踩空。
+    /// </remarks>
     [Theory]
-    [InlineData(0, 3, "w")]
-    [InlineData(-1, 3, "w")]
-    [InlineData(4, 0, "h")]
-    [InlineData(4, -1, "h")]
+    [InlineData(0, 3, "width")]
+    [InlineData(-1, 3, "width")]
+    [InlineData(4, 0, "height")]
+    [InlineData(4, -1, "height")]
     public void FromData_宽或高非正_抛ArgumentOutOfRangeException(int w, int h, string paramName)
     {
         byte[] bytes = new byte[12];
@@ -503,16 +508,18 @@ public sealed class SelectionAndNullTests
     }
 
     /// <summary>
-    /// 🔴 <b>契约公开面不得扩大：<see cref="Coverage8.IsUniform"/> 仍是 internal。</b>
+    /// 🔴 <b>契约 v1.2：<see cref="Coverage8.IsUniform"/> 已由 internal 提升为 public。</b>
     /// </summary>
     /// <remarks>
-    /// 评审明确要求「<c>IsUniform</c> 继续保持 internal 不变」。
-    /// 本测试用反射守住这条线 —— 一旦有人顺手把它改成 public，
-    /// 外部就能开始绕过 <see cref="SelectionMask.CoverageAt"/> 直接索引
-    /// <see cref="Coverage8.Data"/>，而那条路径对 1×1 代理是越界的。
+    /// 本条<b>在 v1.2 之前是反过来的断言</b>（"仍然不是 public"），
+    /// 契约发布后必须同步反转 —— 这类「锁住公开面」的测试若不跟着改，
+    /// 就会变成一个静默阻塞正确变更的假红灯。
+    /// <para>仍然有效的告诫：<see cref="Coverage8.Data"/> 对 1×1 代理只有 1 个字节，
+    /// 直接索引 &gt; 0 就是越界。拿到 <c>IsUniform</c> 后优先走
+    /// <see cref="SelectionMask.CoverageAt"/>，它把两种表示都封好了。</para>
     /// </remarks>
     [Fact]
-    public void Coverage8_IsUniform_仍然不是public()
+    public void Coverage8_IsUniform_已按v1点2提升为public()
     {
         System.Reflection.PropertyInfo? prop = typeof(Coverage8).GetProperty(
             "IsUniform",
@@ -521,7 +528,264 @@ public sealed class SelectionAndNullTests
             | System.Reflection.BindingFlags.NonPublic);
 
         Assert.NotNull(prop);
-        Assert.False(prop!.GetMethod!.IsPublic);
+        Assert.True(
+            prop!.GetMethod!.IsPublic,
+            "IsUniform 必须是 public —— AI-4 查不到 internal 版本就无法区分两种表示。");
+    }
+
+    /// <summary>
+    /// <see cref="Coverage8.IsUniform"/> 的取值必须与实际形态一致：
+    /// <see cref="Coverage8.Uniform"/> 是代理、<see cref="Coverage8.CreateFilled"/> 与
+    /// <see cref="Coverage8.FromData"/> 是真实缓冲。
+    /// </summary>
+    [Fact]
+    public void IsUniform_取值与实际形态一致()
+    {
+        Assert.True(Coverage8.Uniform(128).IsUniform);
+        Assert.False(Coverage8.CreateFilled(4, 3, 200).IsUniform);
+        Assert.False(Coverage8.FromData(new byte[12], 4, 3).IsUniform);
+
+        // FromData 传进来的恰好是 1×1，也仍按真实缓冲处理 ——
+        // 「调用方显式给了数据」本身就是「这不是代理」的信号。
+        Assert.False(Coverage8.FromData(new byte[1], 1, 1).IsUniform);
+    }
+
+    /// <summary>
+    /// <c>FromData</c> 的形参名必须是 <c>width</c> / <c>height</c>（契约 v1.2 逐字）。
+    /// </summary>
+    /// <remarks>
+    /// 形参名是<b>命名实参的调用契约</b>。这条用编译期手段验证：
+    /// 下面这行用命名实参调用，<b>能编译通过就说明形参名对得上</b>。
+    /// </remarks>
+    [Fact]
+    public void FromData_形参名是width与height_支持命名实参()
+    {
+        Coverage8 coverage = Coverage8.FromData(new byte[12], width: 4, height: 3);
+
+        Assert.Equal(4, coverage.Width);
+        Assert.Equal(3, coverage.Height);
+    }
+
+    // ─────────────────── NullDocument（契约 v1.2 补齐）───────────────────
+
+    /// <summary>用于验证「是否真的被施加」的探针 mutation。</summary>
+    private sealed class CountingMutation : DocumentMutation
+    {
+        /// <summary>被 <c>Apply</c> 调用的次数。</summary>
+        public int ApplyCount { get; private set; }
+
+        /// <summary>被 <c>Revert</c> 调用的次数。</summary>
+        public int RevertCount { get; private set; }
+
+        /// <inheritdoc/>
+        public override void Apply() => ApplyCount++;
+
+        /// <inheritdoc/>
+        public override void Revert() => RevertCount++;
+    }
+
+    /// <summary>
+    /// 🔴 <b>NullDocument 是 M0 硬性要求，v1.1 之前一直缺失。</b>
+    /// 下游 AI 靠它并行开工，所以行为必须可预测、可断言。
+    /// </summary>
+    [Theory]
+    [InlineData(800, 600)]
+    [InlineData(1, 1)]
+    [InlineData(0, 0)]
+    [InlineData(-5, -5)]
+    public void NullDocument_尺寸原样报告_图层恒空_选区恒null(int w, int h)
+    {
+        var document = new NullDocument(new DocSize(w, h));
+
+        Assert.Equal(new DocSize(w, h), document.Size);
+        Assert.Empty(document.Layers);
+        Assert.Null(document.Selection);
+    }
+
+    /// <summary>默认画布是一个同样尺寸的 <see cref="NullCanvas"/>。</summary>
+    [Fact]
+    public void NullDocument_默认画布是同尺寸的NullCanvas()
+    {
+        var document = new NullDocument(new DocSize(640, 480));
+
+        Assert.IsType<NullCanvas>(document.Canvas);
+        Assert.Equal(new DocSize(640, 480), document.Canvas.Size);
+    }
+
+    /// <summary>显式传入的画布被原样保留。</summary>
+    [Fact]
+    public void NullDocument_显式画布被原样保留()
+    {
+        ICanvas canvas = new NullCanvas(new DocSize(1, 1));
+        var document = new NullDocument(new DocSize(999, 999), canvas);
+
+        Assert.Same(canvas, document.Canvas);
+        Assert.Equal(new DocSize(999, 999), document.Size);
+    }
+
+    /// <summary>画布为 null 必须抛，不能让它变成 NRE 留在使用现场。</summary>
+    [Fact]
+    public void NullDocument_画布为null_抛ArgumentNullException()
+    {
+        Assert.Throws<ArgumentNullException>(
+            () => new NullDocument(new DocSize(1, 1), null!));
+    }
+
+    /// <summary>
+    /// <see cref="NullDocument.Changed"/> <b>永不触发</b>——没有状态可改。
+    /// </summary>
+    [Fact]
+    public void NullDocument_Changed永不触发()
+    {
+        var document = new NullDocument(new DocSize(4, 3));
+        int fired = 0;
+        document.Changed += _ => fired++;
+
+        document.Canvas.Invalidate(new DocRect(new DocPoint(0, 0), new DocSize(4, 3)));
+        document.Mutate(_ => { });
+        document.MutateAll(new CountingMutation());
+
+        Assert.Equal(0, fired);
+    }
+
+    /// <summary>
+    /// 🔴 <see cref="NullDocument.Mutate"/> 与 <see cref="NullDocument.MutateAll"/>
+    /// 都是<b>空实现：连 <c>Apply</c> 都不调用</b>。
+    /// </summary>
+    /// <remarks>
+    /// 「不崩溃」不等于「会执行」。这条断言让下游在测试里误以为 Null 文档
+    /// 会施加 mutation 时立刻暴露问题，而不是静默地什么都不发生。
+    /// </remarks>
+    [Fact]
+    public void NullDocument_Mutate与MutateAll_都不施加任何mutation()
+    {
+        var document = new NullDocument(new DocSize(4, 3));
+        var probe = new CountingMutation();
+
+        document.MutateAll(probe);
+        Assert.Equal(0, probe.ApplyCount);
+        Assert.Equal(0, probe.RevertCount);
+
+        bool txCalled = false;
+        document.Mutate(_ => txCalled = true);
+        Assert.False(txCalled);
+    }
+
+    /// <summary>空数组是合法的 no-op，不得抛。</summary>
+    [Fact]
+    public void NullDocument_MutateAll_空数组不抛()
+    {
+        var document = new NullDocument(new DocSize(4, 3));
+
+        document.MutateAll();
+        document.MutateAll([]);
+
+        Assert.Empty(document.Layers);
+    }
+
+    /// <summary>
+    /// 🔴 <c>IDocument.MutateAll</c> 的签名必须是 <c>params DocumentMutation[]</c>。
+    /// </summary>
+    /// <remarks>
+    /// 用反射验证：<c>params</c> 在 C# 里编译成数组形参 + <c>ParamArrayAttribute</c>，
+    /// 两者都要在，AI-3 才能用<b>可变参数</b>语法一次提交多个。
+    /// </remarks>
+    [Fact]
+    public void IDocument_MutateAll签名是params数组()
+    {
+        System.Reflection.MethodInfo? method = typeof(IDocument).GetMethod("MutateAll");
+
+        Assert.NotNull(method);
+        System.Reflection.ParameterInfo[] ps = method!.GetParameters();
+        Assert.Single(ps);
+        Assert.Equal(typeof(DocumentMutation[]), ps[0].ParameterType);
+        Assert.NotNull(
+            System.Reflection.CustomAttributeExtensions.GetCustomAttribute(
+                ps[0], typeof(System.ParamArrayAttribute)));
+        Assert.Equal("mutations", ps[0].Name);
+    }
+
+    /// <summary>
+    /// <see cref="ProjectPixelFormat"/> 的<b>枚举序号参与 <c>.comp</c> 序列化</b>，
+    /// 改动会让已存的工程读不出来。新增只能追加到末尾。
+    /// </summary>
+    [Fact]
+    public void ProjectPixelFormat_枚举值固定为0和1()
+    {
+        Assert.Equal(0, (int)ProjectPixelFormat.PremultipliedRgba8);
+        Assert.Equal(1, (int)ProjectPixelFormat.Gray8);
+        Assert.Equal(2, Enum.GetValues<ProjectPixelFormat>().Length);
+    }
+
+    /// <summary>
+    /// <see cref="ProjectSnapshot.Images"/> 与 <see cref="ProjectSnapshot.Masks"/>
+    /// 默认是<b>空字典</b>而不是 <see langword="null"/>，调用方可以直接遍历。
+    /// </summary>
+    [Fact]
+    public void ProjectSnapshot_Images与Masks_默认是空字典而非null()
+    {
+        var snapshot = new ProjectSnapshot();
+
+        Assert.NotNull(snapshot.Images);
+        Assert.NotNull(snapshot.Masks);
+        Assert.Empty(snapshot.Images);
+        Assert.Empty(snapshot.Masks);
+    }
+
+    /// <summary>两个字典可由 <c>init</c> 赋值，且键就是图层 id。</summary>
+    [Fact]
+    public void ProjectSnapshot_Images与Masks_可由init赋值()
+    {
+        Guid layerId = Guid.NewGuid();
+        var asset = new FakeAsset(2, 2, ProjectPixelFormat.PremultipliedRgba8, 16);
+        var mask = new FakeAsset(2, 2, ProjectPixelFormat.Gray8, 4);
+
+        var snapshot = new ProjectSnapshot
+        {
+            Images = new Dictionary<Guid, IProjectAsset> { [layerId] = asset },
+            Masks = new Dictionary<Guid, IProjectAsset> { [layerId] = mask },
+        };
+
+        Assert.Same(asset, snapshot.Images[layerId]);
+        Assert.Same(mask, snapshot.Masks[layerId]);
+    }
+
+    /// <summary>
+    /// 🔴 <b>契约 v1.2 没有为 <see cref="IProjectAsset"/> 指定实现</b>，
+    /// 本测试用最小替身证明「这个接口确实可被实现」，
+    /// 并锁住「长度 = W x H x (Gray8 ? 1 : 4)」这条约定。
+    /// </summary>
+    private sealed class FakeAsset : IProjectAsset
+    {
+        /// <summary>构造指定尺寸与格式的替身。</summary>
+        public FakeAsset(int width, int height, ProjectPixelFormat format, int length)
+        {
+            Width = width;
+            Height = height;
+            Format = format;
+            Pixels = new byte[length];
+        }
+
+        /// <inheritdoc/>
+        public int Width { get; }
+
+        /// <inheritdoc/>
+        public int Height { get; }
+
+        /// <inheritdoc/>
+        public ProjectPixelFormat Format { get; }
+
+        /// <inheritdoc/>
+        public ReadOnlyMemory<byte> Pixels { get; }
+    }
+
+    [Fact]
+    public void IProjectAsset_像素长度约定是宽乘高乘步长()
+    {
+        // RGBA8 步长 4
+        Assert.Equal(2 * 2 * 4, new FakeAsset(2, 2, ProjectPixelFormat.PremultipliedRgba8, 2 * 2 * 4).Pixels.Length);
+        // Gray8 步长 1
+        Assert.Equal(2 * 2 * 1, new FakeAsset(2, 2, ProjectPixelFormat.Gray8, 2 * 2 * 1).Pixels.Length);
     }
 
     // ─────────────────── NullCanvas ───────────────────

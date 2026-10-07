@@ -34,11 +34,18 @@ public sealed class Coverage8
     /// 是否为 1×1 均匀代理。
     /// </summary>
     /// <remarks>
-    /// <b>刻意不设为 public。</b> 契约附录 A 没有这一项，公开面必须与 v1.1 逐字一致。
-    /// 只在本程序集内给 <see cref="SelectionMask.CoverageAt"/> 判断要不要展开。
-    /// 外部消费方一律走 <see cref="SelectionMask.CoverageAt"/>，不要自己读 <see cref="Data"/>。
+    /// 🔴 <b>v1.2 由 internal 提升为 public。</b>v1.1 时刻意保持 internal，
+    /// 理由是「外部一律走 <see cref="SelectionMask.CoverageAt"/>，不要自己读 <see cref="Data"/>」——
+    /// 但契约 v1.2 查明 <b>AI-4 查不到它</b>，拿不到就没法区分两种表示。
+    /// 契约公开面因此扩大了这一项。
+    /// <para><b>⚠️ 公开之后这条建议依然成立，且更重要了</b>：
+    /// <see cref="Data"/> 对 1×1 代理<b>只有 1 个字节</b>，直接索引 &gt; 0 就是越界。
+    /// 拿到本属性后正确用法是：<c>IsUniform == true</c> 时读 <c>Data[0]</c>，
+    /// 否则才按 <c>iy * Width + ix</c> 索引 —— 而
+    /// <see cref="SelectionMask.CoverageAt"/> 已经把这两条分支都封好了，
+    /// <b>消费方优先走它</b>。</para>
     /// </remarks>
-    internal bool IsUniform { get; }
+    public bool IsUniform { get; }
 
     /// <summary>创建全分辨率覆盖度缓冲，全部填 <paramref name="value"/>。</summary>
     /// <param name="w">宽度像素，&gt; 0。</param>
@@ -91,15 +98,19 @@ public sealed class Coverage8
     /// 🔴 <b>契约 v1.2 新增。</b>从调用方提供的字节数组导入覆盖度数据。
     /// </summary>
     /// <param name="data">
-    /// 行优先的单通道灰度数据，长度必须<b>恰好等于</b> <c>w * h</c>，无对齐填充。
+    /// 行优先的单通道灰度数据，长度必须<b>恰好等于</b> <c>width * height</c>，无对齐填充。
     /// 0 = 完全隐藏，255 = 完全显示。
     /// </param>
-    /// <param name="w">宽度像素，&gt; 0。</param>
-    /// <param name="h">高度像素，&gt; 0。</param>
+    /// <param name="width">宽度像素，&gt; 0。</param>
+    /// <param name="height">高度像素，&gt; 0。</param>
     /// <returns>覆盖度缓冲，内容为 <paramref name="data"/> 的一份拷贝。</returns>
-    /// <exception cref="ArgumentOutOfRangeException">宽或高不为正，或 <c>w * h</c> 溢出 <see cref="int"/>。</exception>
-    /// <exception cref="ArgumentException"><paramref name="data"/> 的长度不等于 <c>w * h</c>。</exception>
+    /// <exception cref="ArgumentOutOfRangeException">宽或高不为正，或 <c>width * height</c> 溢出 <see cref="int"/>。</exception>
+    /// <exception cref="ArgumentException"><paramref name="data"/> 的长度不等于 <c>width * height</c>。</exception>
     /// <remarks>
+    /// <para><b>形参名照契约 v1.2 逐字取 <c>width</c> / <c>height</c></b>，
+    /// 不沿用 <see cref="CreateFilled"/> 的 <c>w</c> / <c>h</c>：
+    /// 形参名是<b>命名实参的调用契约</b>，<c>FromData(bytes, width: 4, height: 3)</c> 必须能编译。</para>
+    ///
     /// <para><b>为什么必须拷贝，不能持有 <paramref name="data"/> 的引用。</b>
     /// <see cref="ReadOnlySpan{T}"/> 是<b>栈视图</b>，它的生存期不跨方法边界 ——
     /// 出了调用它的那个栈帧，底层内存就可能被复用或释放，而本对象仍持有指向它的视图。
@@ -118,32 +129,32 @@ public sealed class Coverage8
     /// <para><b>长度必须恰好相等，不接受「至少」。</b>接受「至少」会让多余字节被静默忽略，
     /// 而调用方几乎总是因为算错了行距或忘了乘通道数才多给 —— 那时候应该炸，不该悄悄少读一段。</para>
     /// </remarks>
-    public static Coverage8 FromData(ReadOnlySpan<byte> data, int w, int h)
+    public static Coverage8 FromData(ReadOnlySpan<byte> data, int width, int height)
     {
-        if (w <= 0)
+        if (width <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(w), w, "宽度必须为正。");
+            throw new ArgumentOutOfRangeException(nameof(width), width, "宽度必须为正。");
         }
 
-        if (h <= 0)
+        if (height <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(h), h, "高度必须为正。");
+            throw new ArgumentOutOfRangeException(nameof(height), height, "高度必须为正。");
         }
 
-        long len = (long)w * h;
+        long len = (long)width * height;
         if (len > int.MaxValue)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(w), $"尺寸过大：{w}×{h} 需要 {len} 字节，超过 int 上限。");
+                nameof(width), $"尺寸过大：{width}×{height} 需要 {len} 字节，超过 int 上限。");
         }
 
         if (data.Length != len)
         {
             throw new ArgumentException(
-                $"数据长度 {data.Length} 与尺寸 {w}×{h} 所需的 {len} 不符。", nameof(data));
+                $"数据长度 {data.Length} 与尺寸 {width}×{height} 所需的 {len} 不符。", nameof(data));
         }
 
         // 拷贝而非持有 span：span 是栈视图，出了调用者的栈帧就是悬垂引用。
-        return new Coverage8(w, h, data.ToArray(), isUniform: false);
+        return new Coverage8(width, height, data.ToArray(), isUniform: false);
     }
 }
