@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Compositor.UI.Tests</RootNamespace>
+    <AssemblyName>Compositor.UI.Tests</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+
+    <!-- 与 Compositor.Core.Tests 同因：测试方法写 XML 注释是噪音，
+         且测试程序集不需要产出文档文件。详见该 csproj 内的说明。 -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Compositor.Core\Compositor.Core.csproj" />
+    <ProjectReference Include="..\..\src\Compositor.UI\Compositor.UI.csproj" />
+  </ItemGroup>
+
+</Project>

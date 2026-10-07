@@ -9,4 +9,16 @@
     <ProjectReference Include="..\Compositor.Core\Compositor.Core.csproj" />
   </ItemGroup>
 
+  <!--
+    Avalonia 12 已实测可还原（2026-10-07，AI-6）。
+    ⚠️ 严禁添加 SkiaSharp 的 PackageReference：
+    Avalonia.Skia 会传递带入 SkiaSharp 3.119.3-preview.1.1，
+    显式声明会触发版本降级错误导致编译失败。Skia 类型经 Avalonia.Skia 使用。
+  -->
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.0.0" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.0.0" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.0" />
+  </ItemGroup>
+
 </Project>
