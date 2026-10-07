@@ -52,7 +52,8 @@ foreach ($entry in $groups.GetEnumerator()) {
     $files = 0
 
     foreach ($f in Get-ChildItem -LiteralPath $dir -Recurse -File |
-                Where-Object { $Extension -contains $_.Extension }) {
+                Where-Object { $Extension -contains $_.Extension } |
+                Where-Object { $_.FullName -notmatch '\\(obj|bin|out|TestResults|test-artifacts)\\' }) {
         $lines = [System.IO.File]::ReadAllLines($f.FullName)
         $total += $lines.Count
         $nonBlank += ($lines | Where-Object { $_.Trim() -ne '' }).Count
@@ -79,7 +80,8 @@ if ($Path -and (Test-Path -LiteralPath $Path) -and $Path -ne $repo) {
     Write-Host ("--- 指定路径: {0} ---" -f $Path) -ForegroundColor Yellow
     $n = 0
     foreach ($f in Get-ChildItem -LiteralPath $Path -Recurse -File |
-                Where-Object { $Extension -contains $_.Extension }) {
+                Where-Object { $Extension -contains $_.Extension } |
+                Where-Object { $_.FullName -notmatch '\\(obj|bin|out|TestResults|test-artifacts)\\' }) {
         $c = [System.IO.File]::ReadAllLines($f.FullName).Count
         $n += $c
         Write-Host ("{0,6}  {1}" -f $c, $f.FullName.Replace($repo + '\', ''))

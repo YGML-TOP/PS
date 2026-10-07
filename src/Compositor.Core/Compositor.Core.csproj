@@ -7,4 +7,11 @@
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- CSemantics 承载 C 的舍入与窄化转换语义，是整套直译对齐黄金样本的前提，
+         最该被直接单元测试。但它是 internal，测试程序集够不着。
+         这条把它开放给测试项目——只开放 internal，不放宽 public API 边界。 -->
+    <InternalsVisibleTo Include="Compositor.Core.Tests" />
+  </ItemGroup>
+
 </Project>

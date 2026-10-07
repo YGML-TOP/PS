@@ -5,6 +5,15 @@
     <AssemblyName>Compositor.Core.Tests</AssemblyName>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+
+    <!-- 🔴 必须在这里也压掉 CS1591。
+         Directory.Build.props 全局开了 GenerateDocumentationFile=true 且 TreatWarningsAsErrors=true，
+         但 CS1591（公开成员缺 XML 注释）此前只在 Compositor.Core.csproj 里被 NoWarn。
+         结果：测试项目里每一个 `public void` [Fact] 方法都会因 CS1591 报错，
+         而 TreatWarningsAsErrors 会把它升级为错误 —— 装上 SDK 的第一次 dotnet build 就会全线红。
+         测试方法写 XML 注释是噪音，测试程序集也不需要产出文档文件，所以直接关掉文档生成 + NoWarn。 -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>
