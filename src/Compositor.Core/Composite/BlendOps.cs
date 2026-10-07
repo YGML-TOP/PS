@@ -112,27 +112,52 @@ public static class BlendOps
     /// <param name="backdrop">被混合到的下方内容（就地修改）。</param>
     /// <param name="source">上方待混合的图层。要求与 <paramref name="backdrop"/> 同尺寸。</param>
     /// <param name="mode">混合模式。</param>
-    /// <param name="sourceAlphaScale">
-    /// 源 alpha 的整体缩放，0–1。用于实现图层不透明度与蒙版覆盖率
-    /// （两者都是「让源更透明」，语义完全一样，可以合并成同一个系数）。
-    /// 默认 1.0 表示不额外缩放。
+    /// <param name="maskCoverage">
+    /// <b>蒙版覆盖率</b>，0–1。来源：有效蒙版 = 自身栅格蒙版 × 剪贴 coverage × 所有祖先分组蒙版，
+    /// 三者在<b>进入本次合成之前</b>已逐层相乘完毕。默认 1.0 表示无蒙版。
+    /// </param>
+    /// <param name="opacity">
+    /// <b>图层不透明度</b>，0–1。作用于<b>本源自身</b>。
+    /// 若 <paramref name="source"/> 是分组的扁平结果，则这里施加的是<b>该组</b>的不透明度，
+    /// 必须在组内合成完成之后才施加。默认 1.0 表示完全不透明。
     /// </param>
     /// <exception cref="ArgumentNullException"><paramref name="backdrop"/> 或 <paramref name="source"/> 为 <see langword="null"/>。</exception>
     /// <exception cref="ArgumentException">两块缓冲尺寸不一致。</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> 未定义，或 <paramref name="sourceAlphaScale"/> 不在 0–1 内。</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> 未定义，或两个系数不在 0–1 内。</exception>
     /// <remarks>
-    /// <para><b>缩放作用在预乘值上</b>：<paramref name="sourceAlphaScale"/> 同时乘到源的三个色通道和 alpha 上。
-    /// 这与「先反预乘、再只缩放 alpha」是<b>同一个结果</b>——预乘的定义就是 <c>color x alpha</c>，
-    /// 缩放 alpha 等价于缩放预乘值。写在预乘侧的好处是永远不需要在缩放前反预乘，
-    /// 少一条能让 alpha 铁律走漏的路径。</para>
-    /// <para>本方法<b>不</b>处理剪贴蒙版、可见性、图层顺序 —— 那些是合成器遍历的职责，
+    /// <para><b>🔴 为什么「蒙版覆盖率」与「图层不透明度」必须是两个参数，不能合成一个。</b>
+    /// 二者在<b>树上的作用时机不同</b>：
+    /// <list type="number">
+    /// <item><b>蒙版是逐层乘的</b>。一张图层的有效覆盖率要把它自己那张栅格蒙版、
+    /// 剪贴 coverage、以及<b>所有祖先分组</b>的蒙版乘起来。乘完才进入混合。</item>
+    /// <item><b>不透明度是在组内合成完成之后统一施加的</b>。一个分组里的多层先各自合成，
+    /// 得到该组的扁平结果，再由这个结果整体参与不透明度。</item>
+    /// </list>
+    /// 合成一个标量只在「单一来源」时碰巧对；一旦出现分组蒙版，
+    /// 调用点就分不清手上那个系数到底是逐层乘出来的还是组级施加的 ——
+    /// 而这种错<b>不会让任何测试变红</b>，只会让画面淡一点。
+    /// 保持两个具名参数，等于把这件事在类型层面钉死。</para>
+    ///
+    /// <para><b>诚实交代：在这一个调用点上，两者的算术效果是可交换的</b> ——
+    /// 它们都是把预乘源整体乘一个系数，顺序与合并都不改变结果
+    /// （见 <c>BlendModeTests.MaskCoverageAndOpacity_AreArithmeticallyCommutativeAtThisCallSite</c>）。
+    /// 拆开的理由<b>不是算术，是调用点的可读性与树级时机</b>；
+    /// 真正会算出不同像素的是「不透明度施加在单层还是施加在已合成的组上」，
+    /// 那是合成器遍历的职责，不是本方法的职责。
+    /// 但即便如此也不应该合并参数 —— 一旦合并，下一个调用点就会按自己的直觉填错。</para>
+    ///
+    /// <para><b>缩放作用在预乘值上</b>：两个系数都同时乘到源的三个色通道和 alpha 上。
+    /// 这与「先反预乘、再只缩放 alpha」是<b>同一个结果</b>——预乘的定义就是 <c>color x alpha</c>。
+    /// 写在预乘侧的好处是永远不需要在缩放前反预乘，少一条能让 alpha 铁律走漏的路径。</para>
+    /// <para>本方法<b>不</b>处理图层顺序、可见性、剪贴栈的成栈判定 —— 那些是合成器遍历的职责，
     /// 本类只管「两个像素怎么混」。</para>
     /// </remarks>
     public static void Composite(
         PixelBuffer backdrop,
         PixelBuffer source,
         BlendMode mode,
-        double sourceAlphaScale = 1.0)
+        double maskCoverage = 1.0,
+        double opacity = 1.0)
     {
         ArgumentNullException.ThrowIfNull(backdrop);
         ArgumentNullException.ThrowIfNull(source);
@@ -149,18 +174,18 @@ public static class BlendOps
             throw new ArgumentOutOfRangeException(nameof(mode), mode, "未定义的混合模式。");
         }
 
-        if (sourceAlphaScale < 0.0 || sourceAlphaScale > 1.0 || double.IsNaN(sourceAlphaScale))
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(sourceAlphaScale), sourceAlphaScale, "必须是 0–1 之间的实数。");
-        }
+        RequireUnitRange(maskCoverage, nameof(maskCoverage));
+        RequireUnitRange(opacity, nameof(opacity));
 
         Span<byte> dst = backdrop.Raw;
         ReadOnlySpan<byte> src = source.Rgba;
 
+        // 两个系数都作用在预乘源上，因此合并成一个缩放因子。
+        // 合并只是省一次乘法，不改变语义 —— 语义上的区别在上面的参数文档里。
+        double k = maskCoverage * opacity * (1.0 / 255.0);
+
         for (int i = 0; i < dst.Length; i += 4)
         {
-            double k = sourceAlphaScale * (1.0 / 255.0);
             double sa = src[i + 3] * k;
             PremulRgba result = BlendPixel(
                 dst[i] * (1.0 / 255.0), dst[i + 1] * (1.0 / 255.0), dst[i + 2] * (1.0 / 255.0), dst[i + 3] * (1.0 / 255.0),
@@ -171,6 +196,19 @@ public static class BlendOps
             dst[i + 1] = ToByte(result.G);
             dst[i + 2] = ToByte(result.B);
             dst[i + 3] = ToByte(result.A);
+        }
+    }
+
+    /// <summary>校验系数是 0–1 之间的实数。</summary>
+    /// <param name="value">待校验的系数。</param>
+    /// <param name="paramName">出参名，用于异常。</param>
+    /// <exception cref="ArgumentOutOfRangeException">不是有限数，或不在 [0,1] 内。</exception>
+    private static void RequireUnitRange(double value, string paramName)
+    {
+        if (double.IsNaN(value) || value < 0.0 || value > 1.0)
+        {
+            throw new ArgumentOutOfRangeException(
+                paramName, value, "必须是 0–1 之间的实数。");
         }
     }
 

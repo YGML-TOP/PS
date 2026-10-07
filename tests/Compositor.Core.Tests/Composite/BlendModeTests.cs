@@ -543,22 +543,71 @@ public sealed class BlendModeTests
     }
 
     /// <summary>
-    /// <c>sourceAlphaScale</c> 必须等价于「把图层不透明度乘进源的 alpha」。
+    /// <c>opacity</c>（图层不透明度）必须等价于「把该系数乘进源的 alpha」。
     /// </summary>
     [Fact]
-    public void SourceAlphaScale_ActsAsExtraLayerOpacity()
+    public void Opacity_ActsAsLayerOpacity()
     {
-        // 底色不透明红，源不透明绿，Multiply，缩放 0.5
+        // 底色不透明红，源不透明绿，Multiply，opacity = 0.5
         // 缩放后 sa = 0.5、spg = 0.5 → 反预乘 Cs 仍是 (0,1,0)（缩放不改变直通色）✔
         // Multiply(Cb, Cs) = (1*0, 0*1, 0*0) = (0,0,0)
         // wSrc = 0.5 x 0 = 0；wMix = 0.5 x 1 = 0.5；wBkd = 0.5 x 1 = 0.5
         // Co = 0 + 0.5 x (0,0,0) + 0.5 x (1,0,0) = (0.5, 0, 0) → (128, 0, 0)，αo = 1 → 255
+        //
+        // ⚠️ 注意结果 alpha 仍是 255：图层不透明度**只让源变淡，不让下方内容变透**。
+        // 这正是「不透明度施加在源上」与「把最终结果整体乘 k」的区别，
+        // 后者会把底色也一起变淡，是错的。
         PixelBuffer backdrop = Fill(1, 1, 1.0, 0.0, 0.0, 1.0);
         PixelBuffer source = Fill(1, 1, 0.0, 1.0, 0.0, 1.0);
 
-        BlendOps.Composite(backdrop, source, BlendMode.Multiply, 0.5);
+        BlendOps.Composite(backdrop, source, BlendMode.Multiply, 1.0, 0.5);
 
         Assert.Equal(new byte[] { 128, 0, 0, 255 }, backdrop.Rgba.ToArray());
+    }
+
+    /// <summary>
+    /// 🔴 <c>maskCoverage</c> 与 <c>opacity</c> 在<b>这一个调用点</b>上算术可交换。
+    /// </summary>
+    /// <remarks>
+    /// 本测试的作用是<b>防止有人把两个参数"优化"回一个</b>。
+    /// 它们确实可交换 —— 但它们在<b>树上的作用时机不同</b>：
+    /// 蒙版是逐层相乘后进入混合的，不透明度是组内合成完成后统一施加的。
+    /// 合并参数会让调用点分不清自己填的是哪一个，而这种错不会让任何测试变红，
+    /// 只会让画面淡一点。详见 <see cref="BlendOps.Composite"/> 的参数文档。
+    /// </remarks>
+    [Fact]
+    public void MaskCoverageAndOpacity_AreArithmeticallyCommutativeAtThisCallSite()
+    {
+        foreach (BlendMode mode in Enum.GetValues<BlendMode>())
+        {
+            // 蒙版给 0.4、不透明度给 0.5
+            PixelBuffer byMaskThenOpacity = Fill(1, 1, 0.8, 0.3, 0.2, 0.9);
+            BlendOps.Composite(byMaskThenOpacity, Fill(1, 1, 0.1, 0.8, 0.5, 0.7), mode, 0.4, 0.5);
+
+            // 顺序对调：0.5、0.4
+            PixelBuffer byOpacityThenMask = Fill(1, 1, 0.8, 0.3, 0.2, 0.9);
+            BlendOps.Composite(byOpacityThenMask, Fill(1, 1, 0.1, 0.8, 0.5, 0.7), mode, 0.5, 0.4);
+
+            Assert.Equal(byMaskThenOpacity.Rgba.ToArray(), byOpacityThenMask.Rgba.ToArray());
+        }
+    }
+
+    /// <summary>两个系数都必须独立校验，不能只校验其中一个。</summary>
+    [Theory]
+    [InlineData(-0.01, 1.0)]
+    [InlineData(1.01, 1.0)]
+    [InlineData(double.NaN, 1.0)]
+    [InlineData(1.0, -0.01)]
+    [InlineData(1.0, 1.01)]
+    [InlineData(1.0, double.NaN)]
+    [InlineData(double.PositiveInfinity, 1.0)]
+    public void Composite_RejectsOutOfRangeCoefficients(double maskCoverage, double opacity)
+    {
+        PixelBuffer backdrop = Fill(1, 1, 0.5, 0.5, 0.5, 1.0);
+        PixelBuffer source = Fill(1, 1, 0.5, 0.5, 0.5, 1.0);
+
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => BlendOps.Composite(backdrop, source, BlendMode.Normal, maskCoverage, opacity));
     }
 
     /// <summary>完全透明的源不改变底色<b>任何一个字节</b>。</summary>
@@ -605,20 +654,6 @@ public sealed class BlendModeTests
         PixelBuffer source = Fill(1, 1, 0.5, 0.5, 0.5, 1.0);
 
         Assert.Throws<ArgumentException>(() => BlendOps.Composite(backdrop, source, BlendMode.Normal));
-    }
-
-    /// <summary><c>sourceAlphaScale</c> 越界必须抛。</summary>
-    [Theory]
-    [InlineData(-0.01)]
-    [InlineData(1.01)]
-    [InlineData(double.NaN)]
-    public void Composite_RejectsOutOfRangeAlphaScale(double scale)
-    {
-        PixelBuffer backdrop = Fill(1, 1, 0.5, 0.5, 0.5, 1.0);
-        PixelBuffer source = Fill(1, 1, 0.5, 0.5, 0.5, 1.0);
-
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => BlendOps.Composite(backdrop, source, BlendMode.Normal, scale));
     }
 
     /// <summary>null 参数必须抛。</summary>

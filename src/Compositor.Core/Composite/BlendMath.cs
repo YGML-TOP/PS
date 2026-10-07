@@ -37,10 +37,31 @@ internal readonly record struct Rgb3(double R, double G, double B);
 /// 公式逐字来自 W3C，<b>把握度高</b>。</item>
 /// <item><b>8 个（W3C 没有定义）</b>：linearBurn, linearDodge, vividLight, linearLight,
 /// pinLight, hardMix, subtract, divide。
-/// 只能取自 Adobe 官方文档的散文描述 + 公开实现，<b>Core Image 是闭源的，
-/// 原理上无法证明与 Mac 版逐像素一致</b>。其中 <see cref="PinLight"/> 把握度最低，
+/// 只能取自 Adobe 官方文档的散文描述 + 公开实现。其中 <see cref="PinLight"/> 把握度最低，
 /// 已列入「已知差异」，等 Tier 2 实测裁决。</item>
 /// </list></para>
+///
+/// <para><b>🔴🔴「把握度高」说的是公式实现正确，不是与 Mac 版一致——24 个模式里
+/// 没有任何一个达到「已验证与 Mac 一致」。</b>这一层差别极易被误读，故单列：
+/// <list type="bullet">
+/// <item><b>11 个走 Core Image 的：<b>确定不等价</b>。</b>
+/// <c>LayerAppearance.swift:47</c> 明写 <c>case .linearBurn, .linearDodge, .vividLight,
+/// .linearLight, .pinLight, .hardMix, .subtract, .divide: .normal</c>，
+/// 注释是 <i>"Drawn through Core Image or by hand; never reaches Core Graphics."</i>，
+/// 加上 <c>coreImageFilter</c> 里的 colorBurn / colorDodge 与 :51-53 记录的 softLight，共 11 个。
+/// 且 <c>SeparableBlend.swift:50-52</c> 显示 Mac 版<b>根本不手写数学</b>，
+/// 是 <c>guard let name = mode.coreImageFilter</c> 按名字取 <c>CIFilter</c> 再渲染。
+/// <b>本实现 = W3C，Mac = CoreImage，已知不等价。</b></item>
+/// <item><b>13 个走 Core Graphics 的：<b>可能不对齐</b>（Tier 3）。</b>
+/// Core Graphics 的混合同样是系统实现、没有公开公式，本项目是手写 W3C。
+/// CG 与 W3C/Skia 的 24 模式是否逐像素一致，<b>原理上无法从源码验证</b>。</item>
+/// </list></para>
+///
+/// <para><b>为什么仍然选 W3C 手写</b>（这是判断，不是辩护）：Mac 端选 CoreImage 的唯一理由
+/// 是「它比 CoreGraphics 更接近 Photoshop」，而 W3C 是<b>公开规范里最接近 Photoshop 的那一份</b>。
+/// 因此无论 Mac 走 CI 还是走 CG，手写 W3C 都是最贴近 Mac <i>意图</i>的近似。
+/// 不选 Skia 内置（依赖版本、黑盒）、也不靠猜，是本项目能做的最优选择。
+/// 但「最贴近意图」不等于「已验证一致」，上面那两条边界必须始终写进交付报告。</para>
 ///
 /// <para><b>本类是 internal</b>：对外只暴露 <see cref="BlendOps"/> 的缓冲级入口。
 /// 这些标量函数是实现细节，外部若直接调用就绕开了「反预乘 → 混合 → 预乘」的收口，
