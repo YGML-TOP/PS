@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Compositor.History</RootNamespace>
+    <AssemblyName>Compositor.History</AssemblyName>
+    <!-- 🔴 与 Compositor.Core 同样的理由：Directory.Build.props 全局开了
+         GenerateDocumentationFile=true + TreatWarningsAsErrors=true，
+         public 成员缺 /// 会直接编译失败（CS1591）。
+         本项目的注释完整性由 scripts\check-xmldoc.ps1 保证，不由编译器兜底。 -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Compositor.Core\Compositor.Core.csproj" />
+  </ItemGroup>
+
+</Project>
