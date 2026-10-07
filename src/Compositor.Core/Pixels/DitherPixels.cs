@@ -210,7 +210,7 @@ public readonly ref struct DitherParams
 /// <c>lroundf</c> → <see cref="CSemantics.LRoundF"/>，<c>(uint8_t)</c> → <see cref="CSemantics.U8F(float)"/>。</item>
 /// <item>字面量一律原样：<c>3.14159265f</c>（截断的 π，<b>不是</b> <c>MathF.PI</c>）、
 /// <c>0.2126f/0.7152f/0.0722f</c>、<c>255.0f</c>、<c>0.5f</c>、<c>1.35f</c>、
-/// <c>0.42f</c>、<c>0.45f/1.7f/1.3f/0.7f/0.3f</c> 等；<c>exp2f</c> → <see cref="MathF.Exp2"/>。</item>
+/// <c>0.42f</c>、<c>0.45f/1.7f/1.3f/0.7f/0.3f</c> 等；<c>exp2f</c> → <see cref="MathF.Exp2(float)"/>。</item>
 /// <item>C 中 double→float 的隐式窄化（<c>detail</c>、<c>sqrt</c> 等）补显式 <c>(float)</c>，
 /// 取同一个值。</item>
 /// </list></para>
@@ -395,7 +395,7 @@ public static class DitherPixels
     }
 
     /// <summary>
-    /// 有序抖动的阈值（[0,1)）；更小的 Bayer 矩阵是 8×8 矩阵左上角的重标版本。
+    /// 有序抖动的阈值（取值 0–1，左闭右开）；更小的 Bayer 矩阵是 8×8 矩阵左上角的重标版本。
     /// </summary>
     private static float OrderedThreshold(int style, int x, int y)
     {

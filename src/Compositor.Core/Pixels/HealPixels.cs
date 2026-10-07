@@ -108,7 +108,7 @@ public static class HealPixels
     }
 
     /// <summary>
-    /// 把 32 位键映射成 [0,1) 的均匀数（原 C 的 <c>heal_unit</c>）。
+    /// 把 32 位键映射到 0–1（左闭右开）区间的均匀数（原 C 的 <c>heal_unit</c>）。
     /// </summary>
     private static double HealUnit(uint key) => (double)(HealHash(key) >> 8) / 16777216.0;
 
