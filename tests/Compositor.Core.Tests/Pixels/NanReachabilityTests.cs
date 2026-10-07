@@ -15,7 +15,7 @@ namespace Compositor.Core.Tests.Pixels;
 /// 全部能产生 NaN 的算式（0/0、√负数、log 非正、Inf 参与运算）都被显式判据或循环边界挡住。
 /// 完整证据表见 <c>docs/nan-reachability.md</c>。</para>
 ///
-/// <para><b>因此 <c>CSemantics.FMin</c>/<c>FMax</c> 没有被添加</c>：
+/// <para><b>因此 <c>CSemantics.FMin</c>/<c>FMax</c> 没有被添加</b>：
 /// 加了也到不了，且要动 ~100 处调用点重新 review（<c>00d</c> §3 明确禁止）。
 /// 本类的价值是<b>把"不可达"这个结论锁成可执行的回归</b> ——
 /// 若哪天有人删掉 <c>DitherPixels.c:166</c> 的 <c>levels &lt; 2 ? 2</c> 钳位，

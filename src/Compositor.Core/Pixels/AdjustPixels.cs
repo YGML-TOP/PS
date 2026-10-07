@@ -67,7 +67,11 @@ public static partial class AdjustPixels
                 }
 
                 uint level = (2126u * r + 7152u * g + 722u * b + 5000u) / 10000u;
-                int color = (level > 255 ? 255u : level) * 3;
+
+                // 原 C: uint32_t color = (level > 255 ? 255 : level) * 3;
+                // 取 int 而非 uint：level 恒 ≤ 255（r/g/b 已被上面的反预乘夹到 ≤255，权重和恰为 10000），
+                // 故 color ≤ 765，索引最大 767 < table.Length(768)，转换无损。
+                int color = (int)((level > 255u ? 255u : level) * 3u);
 
                 rgba[p] = (byte)((table[color] * a + 127u) / 255u);
                 rgba[p + 1] = (byte)((table[color + 1] * a + 127u) / 255u);
@@ -258,6 +262,10 @@ public static partial class AdjustPixels
         ReadOnlySpan<float> shadows, ReadOnlySpan<float> midtones, ReadOnlySpan<float> highlights,
         int preserveLuminosity)
     {
+        // CA2014：stackalloc 提到循环外。三格在下一次迭代用到之前必被第 271 行那个 for 写满 0..2，
+        // 所以提到外面不改变任何一次迭代读到的值，只是省掉每像素一次的栈槽重分配。
+        Span<float> c = stackalloc float[3];
+
         for (int y = 0; y < height; ++y)
         {
             int row = y * stride;
@@ -267,7 +275,6 @@ public static partial class AdjustPixels
                 float alpha = rgba[p + 3];
                 if (alpha == 0) continue;
 
-                Span<float> c = stackalloc float[3];
                 for (int i = 0; i < 3; ++i) c[i] = MathF.Min(255.0f, rgba[p + i] * 255.0f / alpha) / 255.0f;
 
                 float before = 0.299f * c[0] + 0.587f * c[1] + 0.114f * c[2];

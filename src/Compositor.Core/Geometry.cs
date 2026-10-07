@@ -210,10 +210,10 @@ public readonly record struct DocRect
     }
 
     /// <summary>
-    /// 把可能越界的 double 夹进 <see cref="int"/> 可表示的范围。
+    /// 把可能越界的 double 夹进 <c>int</c> 可表示的范围。
     /// </summary>
     /// <remarks>
-    /// <paramref name="int.MinValue"/> 附近再减 1 会溢出，checked 上下文里直接抛
+    /// <c>int.MinValue</c> 附近再减 1 会溢出，checked 上下文里直接抛
     /// <see cref="OverflowException"/>；这些方法可能在不受控的 UI 缩放值上被调用，
     /// 所以先夹到 <c>int.MinValue + 1</c> / <c>int.MaxValue - 1</c> 再转换。
     /// </remarks>

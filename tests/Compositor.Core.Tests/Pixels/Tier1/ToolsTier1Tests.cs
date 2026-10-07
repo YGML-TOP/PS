@@ -489,7 +489,7 @@ public sealed class ToolsTier1Tests
     private static int[] PixelAt(byte[] rgba, int stride, int x, int y)
     {
         int p = y * stride + x * 4;
-        return new[] { rgba[p], rgba[p + 1], rgba[p + 2], rgba[p + 3] };
+        return new int[] { rgba[p], rgba[p + 1], rgba[p + 2], rgba[p + 3] };
     }
 
     /// <summary>

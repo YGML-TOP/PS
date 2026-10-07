@@ -15,8 +15,14 @@ public static class LevelsPixels
     /// 用每通道 256 项查找表调整色阶。直译自 <c>levels_apply</c>。
     /// </summary>
     /// <remarks>
-    /// 表间做线性插值（<c>table[lo] + (table[hi]-table[lo])*(x-lo)</c>），
-    /// 因此 LUT 不必是单调或 0→255 端点对齐的。
+    /// <para>表间做线性插值（<c>table[lo] + (table[hi]-table[lo])*(x-lo)</c>），
+    /// 因此 LUT 不必是单调或 0→255 端点对齐的。</para>
+    /// <para>🔴 <b>LUT 的量纲是 0…1，不是 0…255。</b> 原 C 写的是
+    /// <c>fminf(alpha, roundf(result*alpha))</c>，只有 <c>result</c> 落在 0…1 时该式才成立
+    /// （否则乘完 alpha 必然远超 255 而被 fminf 夹成 255，整片饱和）。
+    /// 三个 Swift 调用方都据此构造：<c>Levels.swift:69</c> 的 <c>Float(apply(Double($0)/255, channel:))</c>、
+    /// <c>Curves.swift:37</c> 的 <c>value(...)/255</c>、<c>ImageAdjustments.swift:61</c> 的
+    /// <c>min(1, max(0, output))</c>。<b>传入 0…255 的表不是"效果更强"，是"全屏过曝"。</b></para>
     /// </remarks>
     /// <param name="pixels">预乘 RGBA8 像素，原地修改。</param>
     /// <param name="count">像素个数。</param>
@@ -46,14 +52,19 @@ public static class LevelsPixels
     /// </summary>
     /// <param name="pixels">预乘 RGBA8 像素，只读。</param>
     /// <param name="coverage">
-    /// 可选的 8-bit 覆盖度（选区/蒙版）。为 <c>null</c> 时所有不透明像素等权计入。
-    /// 传 null 等价于原 C 的 <c>coverage == NULL</c> 分支。
+    /// 可选的 8-bit 覆盖度（选区/蒙版）。传 <c>default</c>（长度 0）时所有不透明像素等权计入。
     /// </param>
     /// <param name="count">像素个数。</param>
     /// <param name="bins">输出，长度须 ≥ 1024 的 double。<b>调用前需自行清零</b>（原 C 同样是累加语义）。</param>
+    /// <remarks>
+    /// 🔴 <b>等价改写</b>：原 C 的形参是可为 NULL 的 <c>const uint8_t *coverage</c>，
+    /// 但 <c>ReadOnlySpan&lt;byte&gt;?</c> <b>编译不过</b>——ref struct 不能作为泛型类型实参（CS9244）。
+    /// 故按 C# 惯例改用「空 span 即 null」：<c>coverage.IsEmpty</c> 为真时走无覆盖度分支。
+    /// 数值结果与原 C 的 <c>coverage == NULL</c> 分支逐位一致。
+    /// </remarks>
     public static void Histogram(
         ReadOnlySpan<byte> pixels,
-        ReadOnlySpan<byte>? coverage,
+        ReadOnlySpan<byte> coverage,
         int count,
         Span<double> bins)
     {
@@ -62,7 +73,7 @@ public static class LevelsPixels
             int p = i * 4;
             if (pixels[p + 3] == 0) continue;
 
-            double weight = pixels[p + 3] / 255.0 * (coverage.HasValue ? coverage.Value[i] / 255.0 : 1);
+            double weight = pixels[p + 3] / 255.0 * (coverage.IsEmpty ? 1 : coverage[i] / 255.0);
             for (int channel = 0; channel < 3; ++channel)
             {
                 int value = (int)Math.Min(255.0, CSemantics.Round(pixels[p + channel] * 255.0 / pixels[p + 3]));
@@ -109,12 +120,13 @@ public static class LevelsPixels
                 fraction[channel] = position[channel] - lo[channel];
             }
 
-            int base = (lo[0] + lo[1] * dy + lo[2] * dz) * 4;
+            // C 源码此处变量名为 base。C# 里 base 是关键字（继承访问），不能作标识符，故改名。
+            int baseIndex = (lo[0] + lo[1] * dy + lo[2] * dz) * 4;
             int sx = 4, sy = dy * 4, sz = dz * 4;
 
             for (int channel = 0; channel < 3; ++channel)
             {
-                int c = base + channel;
+                int c = baseIndex + channel;
                 float x00 = cube[c] + (cube[c + sx] - cube[c]) * fraction[0];
                 float x10 = cube[c + sy] + (cube[c + sy + sx] - cube[c + sy]) * fraction[0];
                 float x01 = cube[c + sz] + (cube[c + sz + sx] - cube[c + sz]) * fraction[0];

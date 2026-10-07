@@ -13,7 +13,7 @@ namespace Compositor.Core;
 /// </code>
 /// → 序列化必须写字符串。整数序列化会让 Mac 版读出来的图层<b>全部落到 Normal</b>。
 /// <para><b>成员顺序</b>与 <see cref="BlendModeStrings"/> 的字面量表一一对应（索引即枚举值），
-/// 改动其一必须同步改另一个。</b></para>
+/// 改动其一必须同步改另一个。</para>
 /// </remarks>
 public enum BlendMode
 {

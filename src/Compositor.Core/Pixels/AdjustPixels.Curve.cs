@@ -165,6 +165,10 @@ public static partial class AdjustPixels
         double refineSaturation, ReadOnlySpan<float> mixer, int pointCount, ReadOnlySpan<float> points,
         ReadOnlySpan<float> grade, double blending, double balance, int visualize)
     {
+        // CA2014：stackalloc 提到循环外。四格在每次迭代用到之前都由下面紧跟着的赋值写满 0..3，
+        // 所以提到外面不改变任何一次迭代读到的值，只是省掉每像素一次的栈槽重分配。
+        Span<double> weights = stackalloc double[4];
+
         for (int y = 0; y < height; ++y)
         {
             int row = y * stride;
@@ -232,7 +236,6 @@ public static partial class AdjustPixels
                 double midW = CameraClamp(1 - Math.Abs(Rec709(r, g, b) - split) / (0.35 + reach));
                 double sum = shadowW + midW + highlightW;
                 if (sum > 1e-4) { shadowW /= sum; midW /= sum; highlightW /= sum; }
-                Span<double> weights = stackalloc double[4];
                 weights[0] = shadowW; weights[1] = midW; weights[2] = highlightW; weights[3] = 1;
                 for (int wheel = 0; wheel < 4; ++wheel)
                 {
@@ -252,7 +255,7 @@ public static partial class AdjustPixels
                 {
                     r *= 0.35; g *= 0.35; b *= 0.35;
                 }
-                WritePremultiplied(p, r, g, b, alpha);
+                WritePremultiplied(rgba, p, r, g, b, alpha);
             }
         }
     }
@@ -322,7 +325,9 @@ public static partial class AdjustPixels
                 if (dx == 0 && dy == 0) continue;
                 long sx = x + dx, sy = y + dy;
                 if (sx < 0 || sy < 0 || sx >= width || sy >= height) continue;
-                sum += MathF.Abs(luma[sy * width + sx] - center);
+                // 越界检查已把 sx/sy 卡在 [0,width)×[0,height)，窄化回 int 无损。
+                // C 侧这两个变量是 size_t，本来就能直接下标。
+                sum += MathF.Abs(luma[(int)sy * width + (int)sx] - center);
                 count++;
             }
         }
@@ -462,7 +467,7 @@ public static partial class AdjustPixels
                     luma[index] = target;
                     double r = Math.Min(1.0, rgba[p] / alpha), g = Math.Min(1.0, rgba[p + 1] / alpha), b = Math.Min(1.0, rgba[p + 2] / alpha);
                     ScaleLuminance(ref r, ref g, ref b, target);
-                    WritePremultiplied(p, r, g, b, alpha);
+                    WritePremultiplied(rgba, p, r, g, b, alpha);
                 }
             }
         }
@@ -505,7 +510,7 @@ public static partial class AdjustPixels
                     RgbToHsl(r, g, b, out double h, out double s, out double l);
                     s = sat;
                     HslToRgb(h, s, l, ref r, ref g, ref b);
-                    WritePremultiplied(p, r, g, b, alpha);
+                    WritePremultiplied(rgba, p, r, g, b, alpha);
                 }
             }
         }
@@ -544,7 +549,7 @@ public static partial class AdjustPixels
                     double sharpened = CameraClamp(luma[index] + high * amount * mask * (0.5 + detailMix));
                     double r = Math.Min(1.0, rgba[p] / alpha), g = Math.Min(1.0, rgba[p + 1] / alpha), b = Math.Min(1.0, rgba[p + 2] / alpha);
                     ScaleLuminance(ref r, ref g, ref b, sharpened);
-                    WritePremultiplied(p, r, g, b, alpha);
+                    WritePremultiplied(rgba, p, r, g, b, alpha);
                 }
             }
         }
@@ -594,7 +599,7 @@ public static partial class AdjustPixels
         for (int y = 0; y < height; ++y)
             rgba.Slice(y * stride, width * 4).CopyTo(copy.AsSpan(y * stride));
         double cx = width * 0.5, cy = height * 0.5;
-        double maxR = Math.Hypot(cx, cy);
+        double maxR = CSemantics.Hypot(cx, cy);
         for (int y = 0; y < height; ++y)
         {
             int row = y * stride;
@@ -604,7 +609,7 @@ public static partial class AdjustPixels
                 double alpha = rgba[p + 3];
                 if (alpha == 0) continue;
                 double dx = x + 0.5 - cx, dy = y + 0.5 - cy;
-                double radial = Math.Hypot(dx, dy) / maxR;
+                double radial = CSemantics.Hypot(dx, dy) / maxR;
                 double shift = strength * radial * radial * 2.5;
                 int rx = CSemantics.LRound(x - shift), bx = CSemantics.LRound(x + shift);
                 int pc = row + x * 4;
@@ -613,7 +618,7 @@ public static partial class AdjustPixels
                 double g = Math.Min(1.0, copy[pc + 1] / alpha);
                 double r = Math.Min(1.0, copy[pr] / Math.Max(1.0, copy[pr + 3]));
                 double b = Math.Min(1.0, copy[pb + 2] / Math.Max(1.0, copy[pb + 3]));
-                WritePremultiplied(p, r, g, b, alpha);
+                WritePremultiplied(rgba, p, r, g, b, alpha);
             }
         }
     }
@@ -630,7 +635,7 @@ public static partial class AdjustPixels
         if (amount == 0 || width == 0 || height == 0) return;
         double nx = (x + 0.5) / width * 2.0 - 1.0;
         double ny = (y + 0.5) / height * 2.0 - 1.0;
-        double dist = Math.Hypot(nx, ny) / Math.Sqrt(2.0);
+        double dist = CSemantics.Hypot(nx, ny) / Math.Sqrt(2.0);
         double start = (midpoint / 100.0) * 0.85;
         double t = CameraClamp((dist - start) / 0.35);
         double mask = t * t * (3.0 - 2.0 * t);
@@ -708,7 +713,7 @@ public static partial class AdjustPixels
                 double r = Math.Min(1.0, rgba[p] / alpha), g = Math.Min(1.0, rgba[p + 1] / alpha), b = Math.Min(1.0, rgba[p + 2] / alpha);
                 OpticsDefringe(ref r, ref g, ref b, purpleAmount, purpleHueLow, purpleHueHigh, greenAmount, greenHueLow, greenHueHigh);
                 OpticsVignetteCorrect(ref r, ref g, ref b, x, y, width, height, vignette, vignetteMidpoint);
-                WritePremultiplied(p, r, g, b, alpha);
+                WritePremultiplied(rgba, p, r, g, b, alpha);
             }
         }
     }
@@ -782,7 +787,7 @@ public static partial class AdjustPixels
                     if (h >= 1) h -= 1;
                 }
                 HslToRgb(h, s, l, ref r, ref g, ref b);
-                WritePremultiplied(p, r, g, b, alpha);
+                WritePremultiplied(rgba, p, r, g, b, alpha);
             }
         }
     }

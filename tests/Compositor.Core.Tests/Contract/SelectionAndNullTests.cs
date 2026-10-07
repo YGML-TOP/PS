@@ -508,11 +508,11 @@ public sealed class SelectionAndNullTests
     [InlineData(" ")]
     [InlineData("相对路径.comp")]
     [InlineData("C:\\definitely\\not\\exist\\untouched.comp")]
-    public void NullProjectStore_LoadAsync不依赖路径是否存在(string path)
+    public async Task NullProjectStore_LoadAsync不依赖路径是否存在(string path)
     {
         NullProjectStore store = new NullProjectStore();
 
-        ProjectSnapshot snapshot = store.LoadAsync(path).GetAwaiter().GetResult();
+        ProjectSnapshot snapshot = await store.LoadAsync(path);
 
         Assert.Equal(11, snapshot.Version);
         Assert.Equal("sRGB", snapshot.ColorSpace);
@@ -552,15 +552,15 @@ public sealed class SelectionAndNullTests
     /// 从而反复重载。</para>
     /// </summary>
     [Fact]
-    public void NullProjectStore_ExternalChangeDetected永不触发()
+    public async Task NullProjectStore_ExternalChangeDetected永不触发()
     {
         NullProjectStore store = new NullProjectStore();
 
         int calls = 0;
         store.ExternalChangeDetected += _ => calls++;
 
-        store.SaveAsync(new ProjectSnapshot(), "any.comp").GetAwaiter().GetResult();
-        store.LoadAsync("any.comp").GetAwaiter().GetResult();
+        await store.SaveAsync(new ProjectSnapshot(), "any.comp");
+        await store.LoadAsync("any.comp");
 
         Assert.Equal(0, calls);
     }
@@ -582,7 +582,8 @@ public sealed class SelectionAndNullTests
     [Fact]
     public void LayerNode_默认可见_不透明_普通混合_启用蒙版_非调整层()
     {
-        LayerNode node = new LayerNode();
+        // Transform 是 required（契约缺陷 #10 的编译期护栏）：漏设就编译不过。
+        LayerNode node = new LayerNode { Transform = new LayerTransform() };
 
         Assert.True(node.IsVisible);
         Assert.Equal(1.0f, node.Opacity);
@@ -613,7 +614,11 @@ public sealed class SelectionAndNullTests
     [Fact]
     public void LayerNode_带上Adjustment之后IsAdjustment为真()
     {
-        LayerNode node = new LayerNode { Adjustment = new AdjustmentSpec { Kind = "Levels" } };
+        LayerNode node = new LayerNode
+        {
+            Transform = new LayerTransform(),   // required，见上方契约缺陷 #10
+            Adjustment = new AdjustmentSpec { Kind = "Levels" },
+        };
         // 存到局部变量再解引用：Nullable 流分析对"属性 + 断言后的状态"没有可靠保证，
         // 而本项目 TreatWarningsAsErrors，CS8602 会直接断构建。
         AdjustmentSpec? adjustment = node.Adjustment;

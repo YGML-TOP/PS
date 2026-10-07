@@ -36,7 +36,7 @@ public sealed class GeometryTests
     /// <item>视口 <c>Viewport(OriginX=10, OriginY=20, PointsPerPixel=2, Scale=2)</c></item>
     /// <item>输入 <c>ViewPoint(100, 300)</c></item>
     /// <item>X = (100 - 10) / 2 = 45</item>
-    /// <item>Y = (300 - 20) / 2 = 140 &lt;b>（没有取负）</b></item>
+    /// <item>Y = (300 - 20) / 2 = 140 <b>（没有取负）</b></item>
     /// </list>
     /// 依据原项目 <c>Rendering/CanvasViewport.swift:25-33</c> 的 <c>(point.y - origin.y) / pointsPerPixel</c>：
     /// 纯线性变换，无 Y 取反。视图层若需要 Y 向上，由 UI 层在自己那一侧翻转。
@@ -224,7 +224,7 @@ public sealed class GeometryTests
     /// 手算：Origin=(10,20)、ppp=2、文档点 (45,140)
     /// <list type="bullet">
     /// <item>X = 45 * 2 + 10 = 100</item>
-    /// <item>Y = 140 * 2 + 20 = 300 &lt;b>（没有取负）</b></item>
+    /// <item>Y = 140 * 2 + 20 = 300 <b>（没有取负）</b></item>
     /// </list>
     /// </remarks>
     [Fact]
@@ -254,7 +254,7 @@ public sealed class GeometryTests
     [InlineData(0.0)]
     [InlineData(-1.0)]
     [InlineData(-0.5)]
-    [InlineData(Math.NaN)]
+    [InlineData(double.NaN)]
     [InlineData(double.PositiveInfinity)]
     [InlineData(double.NegativeInfinity)]
     [InlineData(double.MinValue)]
@@ -280,7 +280,7 @@ public sealed class GeometryTests
     [Theory]
     [InlineData(0.0)]
     [InlineData(-1.0)]
-    [InlineData(Math.NaN)]
+    [InlineData(double.NaN)]
     [InlineData(double.PositiveInfinity)]
     public void ToView_缩放非有限正数时抛ArgumentOutOfRangeException(double pointsPerPixel)
     {
@@ -434,22 +434,27 @@ public sealed class GeometryTests
     /// 🔴 <see cref="DocRect.Contains"/> 是<b>半开区间</b>：左边与上边<b>含</b>，右边与下边<b>不含</b>。
     /// </summary>
     /// <remarks>
-    /// 判定式 <c>Left ≤ x &lt; Right</c>、<c>Top ≤ y &lt; Bottom</c>。用带小数的矩形
-    /// <c>Origin=(1.25, 2.75), Size=(3.5, 4.25)</c>：<c>Right = 4.75</c>、<c>Bottom = 7.0</c>。
+    /// 判定式 <c>Left ≤ x &lt; Right</c>、<c>Top ≤ y &lt; Bottom</c>。用带小数的原点配整数尺寸
+    /// <c>Origin=(1.25, 2.75), Size=(3, 4)</c>：<c>Right = 4.25</c>、<c>Bottom = 6.75</c>。
+    /// <para>之所以是<b>小数原点 + 整数尺寸</b>：<c>DocSize</c> 按契约只能取整数量
+    /// （像素尺寸无小数），而原点是小数——这样边界就是"非整数"，能真正测出
+    /// 左/上边界上的点算内、右/下边界上的点算外，而整对齐的矩形测不出这个差别。</para>
     /// <para>半开区间是为了让相邻矩形无缝拼接时接缝列<b>只被覆盖一次</b>；改成闭区间就会出现
     /// 一列/一行被两层重复命中（叠加两次半透明 = 接缝发亮）。</para>
     /// </remarks>
     [Theory]
     [InlineData(1.25, 2.75, true)]     // 左上角点：左含、上含
-    [InlineData(4.7499, 6.9999, true)] // 右下内侧
+    [InlineData(4.2499, 6.7499, true)] // 右下内侧（紧贴但仍在右/下边界之内）
     [InlineData(3.0, 5.0, true)]       // 正中
-    [InlineData(4.75, 2.75, false)]    // 右边界：不含
-    [InlineData(1.25, 7.0, false)]     // 下边界：不含
+    [InlineData(4.25, 2.75, false)]    // 右边界：不含（1.25 + 宽 3 = 4.25）
+    [InlineData(1.25, 6.75, false)]    // 下边界：不含（2.75 + 高 4 = 6.75）
     [InlineData(1.2499, 2.75, false)]  // 左边界外侧
     [InlineData(1.25, 2.7499, false)]  // 上边界外侧
     public void Contains_左与上含右与下不含(double x, double y, bool expected)
     {
-        var rect = new DocRect(new DocPoint(1.25, 2.75), new DocSize(3.5, 4.25));
+        // DocSize 只能取整数（契约：像素尺寸为整数量），故取宽 3 / 高 4，
+        // 使右边界 = 1.25 + 3 = 4.25、下边界 = 2.75 + 4 = 6.75，正好与上面两个边界用例重合。
+        var rect = new DocRect(new DocPoint(1.25, 2.75), new DocSize(3, 4));
 
         Assert.Equal(expected, rect.Contains(new DocPoint(x, y)));
     }
@@ -1163,7 +1168,10 @@ public sealed class GeometryTests
     /// 本文件用"断言为负 + 断言不等于 +3π/2"两重来防住它。</para>
     /// </remarks>
     [Fact]
-    public void Radians_负角度按C#余数语义得到负弧度_不归一化到正区间()
+    // ⚠️ 方法名<b>不能带 "#"</b>：C# 的 # 不是合法标识符字符，词法器会把 `C#余数` 里的
+    // `#余数` 当成预处理指令开头，直接报 CS1040 并级联出 20+ 条假错误。
+    // 故写作 `CSharp`。命名沿用同一铁律：宁可多打两个字，也不要把编译错误卷进来。
+    public void Radians_负角度按CSharp余数语义得到负弧度_不归一化到正区间()
     {
         var minus90 = new LayerTransform { RotationDegrees = -90.0 };
         var minus180 = new LayerTransform { RotationDegrees = -180.0 };
@@ -1223,14 +1231,14 @@ public sealed class GeometryTests
     [InlineData(1_000_000.5, 0.0, 0.0, false)]            // 刚刚越界
     [InlineData(0.0, -1_000_001.0, 0.0, false)]
     [InlineData(-1_000_001.0, 0.0, 0.0, false)]
-    [InlineData(Math.NaN, 0.0, 0.0, false)]
-    [InlineData(0.0, Math.NaN, 0.0, false)]
-    [InlineData(0.0, 0.0, Math.NaN, false)]
+    [InlineData(double.NaN, 0.0, 0.0, false)]
+    [InlineData(0.0, double.NaN, 0.0, false)]
+    [InlineData(0.0, 0.0, double.NaN, false)]
     [InlineData(double.PositiveInfinity, 0.0, 0.0, false)]
     [InlineData(0.0, double.NegativeInfinity, 0.0, false)]
     [InlineData(0.0, 0.0, double.PositiveInfinity, false)]
     [InlineData(0.0, 0.0, double.NegativeInfinity, false)]
-    [InlineData(Math.NaN, Math.NaN, Math.NaN, false)]
+    [InlineData(double.NaN, double.NaN, double.NaN, false)]
     public void IsValid_分量必须有限且原点不越界(
         double originX, double originY, double rotationDegrees, bool expected)
     {

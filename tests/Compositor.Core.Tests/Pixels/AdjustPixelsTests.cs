@@ -57,9 +57,16 @@ public sealed class AdjustPixelsTests
     public void ClampPremultiplied_CountLimitsWork()
     {
         var px = new byte[] { 255, 255, 255, 0, 5, 5, 5, 5 };
-        AdjustPixels.ClampPremultiplied(px, 1); // 只处理第 1 个像素
-        Assert.Equal(0, px[0]);   // 被钳到 alpha=0
-        Assert.Equal(255, px[1]); // 未处理，保持原值
+        AdjustPixels.ClampPremultiplied(px, 1); // count=1 ⇒ 只覆盖 pixels[0..3]
+
+        // rgba_clamp_premultiplied：每通道钳到**本像素**的 alpha。像素 0 的 alpha=0 ⇒ RGB 全变 0。
+        // ⚠️ px[1] 是像素 0 的**绿**通道，不是"第 2 个像素"——像素 1 从 px[4] 开始。
+        //    初版把 px[1] 写回 255 当作"未处理保持原值"，恒错。
+        Assert.Equal(0, px[0]);   // R 钳到 alpha=0
+        Assert.Equal(0, px[1]);   // G 同样被钳（不是"未处理"）
+        Assert.Equal(0, px[2]);
+        Assert.Equal(0, px[3]);   // alpha 本身从不被改
+        Assert.Equal(5, px[4]);   // 像素 1 完全未处理
         Assert.Equal(5, px[6]);
     }
 
@@ -149,11 +156,15 @@ public sealed class AdjustPixelsTests
 
         AdjustPixels.GradientMap(px, w, h, stride, table);
 
-        // 纯白 → level = (2126+7152+722+5000)/10000 = 1 → 不该走到 255
-        // level 为 1，取 table[3]，保持 0
-        Assert.Equal(0, px[0]);
+        // level = (2126*255 + 7152*255 + 722*255 + 5000) / 10000 = 2555000/10000 = 255（整数除法截断 .5）
+        // → color = table + 255*3 = {11, 22, 33}，再按 alpha 乘回：(11*255+127)/255 = 11，其余同理。
+        // ⚠️ 初版注释漏乘了 r/g/b 的 255，算出 level=1 并断言 0，是错的。
+        Assert.Equal(11, px[0]);
+        Assert.Equal(22, px[1]);
+        Assert.Equal(33, px[2]);
+        Assert.Equal(255, px[3]); // alpha 保持
 
-        // 改用一张只有末项有值的表，验证索引路径可达
+        // 同一张表作用于同色像素必须完全一致（无隐藏状态）
         var px2 = new byte[] { 255, 255, 255, 255 };
         AdjustPixels.GradientMap(px2, w, h, stride, table);
         Assert.Equal(px, px2);
@@ -295,7 +306,7 @@ public sealed class AdjustPixelsTests
                 px[p] = (byte)(x * 60); px[p + 1] = (byte)(y * 60); px[p + 2] = 128;
                 px[p + 3] = 255;
             }
-        before.AsSpan().CopyFrom(px);
+        px.AsSpan().CopyTo(before);
 
         AdjustPixels.CameraRaw(px, w, h, stride, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
@@ -374,13 +385,18 @@ public sealed class AdjustPixelsTests
     public void CameraRawClipOverlay_ShadowFlag_TintsDarkPixelsBlue()
     {
         const int w = 1, h = 1, stride = 4;
-        var px = new byte[] { 1, 1, 1, 255 }; // 被切到 0 的阴影
+        // C 的判定是 r <= 0.5/255.0，而 r = p[0]/alpha。alpha=255 时 p[0] 必须真的取 0 才触发；
+        // 写成 1 会得到 r = 1/255 ≈ 0.0039 > 0.00196，分支根本不进（这版曾因此误报失败）。
+        var px = new byte[] { 0, 0, 0, 255 }; // 被切到 0 的阴影
 
         AdjustPixels.CameraRawClipOverlay(px, w, h, stride, 1, 0);
 
-        // 源码：r*=0.35; g*=0.35; b = b*0.35 + 0.65 → 蓝通道最亮
-        Assert.True(px[2] > px[0], "阴影叠加后蓝通道应高于红通道");
-        Assert.True(px[2] > px[1], "阴影叠加后蓝通道应高于绿通道");
+        // C: shadows 分支 r*=0.35; g*=0.35; b = b*0.35 + 0.65 → 蓝通道最亮。
+        // b = 0.65 → write_premultiplied 取 round(0.65*255) = round(165.75) = 166；r、g 为 0。
+        Assert.Equal(0, px[0]);
+        Assert.Equal(0, px[1]);
+        Assert.Equal(166, px[2]);
+        Assert.Equal(255, px[3]); // alpha 从不被改
     }
 
     [Fact]

@@ -290,7 +290,10 @@ internal static class PngCodec
         {
             int dst = y * (stride + 1);
             raw[dst] = 0;
-            Buffer.BlockCopy(rgba, (long)y * stride, raw, dst + 1, stride);
+            // 源偏移用 int 而非 long：rgba 是 byte[]，上方已校验 rgba.Length >= need，
+            // 故 y * stride 必然小于 rgba.Length < int.MaxValue，窄化无损。
+            // （Buffer.BlockCopy 的形参本来就是 int，原写 (long)y * stride 反而编不过。）
+            Buffer.BlockCopy(rgba, y * stride, raw, dst + 1, stride);
         }
 
         byte[] compressed;

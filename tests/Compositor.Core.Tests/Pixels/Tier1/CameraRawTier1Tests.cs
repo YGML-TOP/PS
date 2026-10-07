@@ -174,7 +174,9 @@ public sealed class CameraRawTier1Tests
         int skinDelta = Chroma(skin.Clone().Apply(vibrance).Pixel(0)) - skinBefore;
 
         // L144 `#expect(dullDelta > saturatedDelta + 10, "dull \(dullDelta) vs saturated \(saturatedDelta)")`
-        Assert.True(dullDelta > saturatedDelta + 10, $"暗色 \(dullDelta) 对比饱和色 {saturatedDelta}");
+        // ⚠️ 上一行的 \( \) 是 Swift 的插值语法，在 C# 逐字插值字符串 @$"" 里原样保留即为字面量，
+        // 不必也不该"翻译"成 {dullDelta}——本文件的原则是断言消息也照抄原文本。
+        Assert.True(dullDelta > saturatedDelta + 10, $@"暗色 \(dullDelta) 对比饱和色 {saturatedDelta}");
         // L145 `#expect(dullBefore == skinBefore)`
         Assert.Equal(dullBefore, skinBefore);
         // L146 `#expect(dullDelta > skinDelta + 10, "skin is protected at the same saturation: …")`

@@ -47,7 +47,7 @@ public sealed class NullCanvas(DocSize size) : ICanvas
 }
 
 /// <summary>
-/// 图层树节点。🔴 v1.1 修正：v1.0 契约里 <c>IDocument.Layers</c> 引用了 LayerNode 却<b>从未定义</c>，
+/// 图层树节点。🔴 v1.1 修正：v1.0 契约里 <c>IDocument.Layers</c> 引用了 LayerNode 却<b>从未定义</b>，
 /// 且 LayerTransform 只承载几何+采样，导致任务书 §4.3 要求的"混合模式 / 文件夹不透明度相乘 /
 /// 剪贴蒙版 / 活蒙版链"<b>一项都没有承载类型</b>——AI-1 开工即卡死。此处补齐。
 /// 每个字段与 <c>.comp</c> manifest 的图层记录一一对应（见 <c>docs/project-format.md</c>）。
@@ -63,8 +63,21 @@ public sealed record LayerNode
     /// <summary>是否可见。false 时不参与合成。</summary>
     public bool IsVisible { get; init; } = true;
 
-    /// <summary>几何变换：位置、尺寸、旋转、翻转、采样。</summary>
-    public LayerTransform Transform { get; init; }
+    /// <summary>几何变换：位置、尺寸、旋转、翻转、采样。<b>必填，没有默认值。</b></summary>
+    /// <remarks>
+    /// <para>🔴 契约缺陷 #10（待 v1.2 追认）。v1.1 把本属性写成普通可初始化属性：
+    /// 既没给默认值，也没标 <c>required</c>，且 <see cref="LayerTransform"/> 是引用类型。
+    /// 于是<b>漏设 <see cref="Transform"/> 的图层在合成阶段才会 NRE</b>，
+    /// 崩溃点离出错点很远，定位成本高。</para>
+    /// <para>加 <c>required</c> 把这个坑从运行期挪到编译期。
+    /// <b>它不改变属性类型、不改变读写语义、不改变 <c>.comp</c> 序列化</b>，
+    /// 只让「忘记赋变换」变成一条编译错误。所有正常构造图层的调用方（AI-2 解析 manifest）都会赋值，
+    /// 因此对它们<b>零改动</b>。</para>
+    /// <para>为什么不选 <c>= new()</c>：那会让漏设的图层静默拿到
+    /// <c>Origin=(0,0) / Size=(0,0)</c> 的退化变换——不崩，但画出来是零尺寸图层，
+    /// 属于更难查的一类 bug。<c>required</c> 没有这个中间态。</para>
+    /// </remarks>
+    public required LayerTransform Transform { get; init; }
 
     // v3 / v8
 
