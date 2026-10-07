@@ -87,6 +87,8 @@ jobs:
       - name: Run golden dump test
         working-directory: upstream
         continue-on-error: true
+        env:
+          COMPOSITOR_FIXTURE_DIR: ${{ github.workspace }}/out
         run: >
           xcodebuild test-without-building
           -project Compositor.xcodeproj
@@ -96,7 +98,6 @@ jobs:
           -resultBundlePath GoldenResults.xcresult
           -parallel-testing-enabled NO
           -only-testing:CompositorTests/CompositorBlendGoldenDumpTests
-          TEST_RUNNER_COMPOSITOR_FIXTURE_DIR="${{ github.workspace }}/out"
 
       - name: Collect fixtures
         # 即使测试失败也执行 —— Swift Testing 的 #expect 失败不会中断写文件，
@@ -105,11 +106,21 @@ jobs:
         run: |
           set -uo pipefail
           mkdir -p out
-          if [ -f "upstream/out/$FIXTURE_NAME" ]; then
-            cp "upstream/out/$FIXTURE_NAME" "out/$FIXTURE_NAME"
-          else
-            echo "::warning::预期路径没有产物，改用 find 兜底"
-            find upstream -name "$FIXTURE_NAME" -type f -exec cp {} "out/$FIXTURE_NAME" \; 2>/dev/null || true
+          # ⚠️ 上游是沙箱 .app 包。测试进程的 cwd 与环境变量都可能落在
+          #    ~/Library/Containers/<bundle-id>/Data/ 下，而不是工作区。
+          #    实测（run 37642040229）：文件写在容器里，工作区里找不到。
+          #    所以这里扫 $HOME / $RUNNER_TEMP / 工作区，不猜路径。
+          if [ ! -f "out/$FIXTURE_NAME" ]; then
+            found=$(find "$HOME" "$RUNNER_TEMP" . -name "$FIXTURE_NAME" -type f 2>/dev/null | head -1 || true)
+            if [ -n "${found:-}" ]; then
+              echo "found fixture at: $found"
+              cp "$found" "out/$FIXTURE_NAME"
+            fi
+          fi
+          # 顺手把测试进程的 print 抓出来，FIXTURE_WRITTEN 那行是成功的判据。
+          if [ -d upstream/*.xcresult ] || [ -d upstream/GoldenResults.xcresult ]; then
+            xcrun xcresulttool get test-results tests --path upstream/GoldenResults.xcresult 2>/dev/null \
+              | head -60 > out/test-summary.json || true
           fi
           cp upstream/CompositorTests/CompositorBlendGoldenDumpTests.swift out/ 2>/dev/null || true
           {
