@@ -58,6 +58,10 @@ public static class PngCodec
             throw new ImageCodecException(ImageImportError.TooLarge);
         }
 
+        // 内存护栏同样必须在分配之前。格式上限回答"这是不是合法工程"（与机器无关），
+        // 护栏回答"这台机器现在扛不扛得住"（与机器有关），两者不能互相替代。
+        ImagingLimits.EnsureWithinMemoryBudget((long)info.Width * info.Height);
+
         if (!TryDecodePremultiplied(codec, info, out var bitmap))
         {
             throw new ImageCodecException(ImageImportError.Unreadable);

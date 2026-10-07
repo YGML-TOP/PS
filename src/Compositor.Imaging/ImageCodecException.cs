@@ -11,6 +11,16 @@ public enum ImageImportError
 
     /// <summary>超过文档像素预算或最长边限制。对应 <c>.tooLarge</c>。</summary>
     TooLarge,
+
+    /// <summary>
+    /// 🔴 <b>仅 Windows 版新增</b>：估算本机内存扛不住这次分配。
+    /// </summary>
+    /// <remarks>
+    /// Mac 版<b>没有</b>对应 case —— 它要么扛得住，要么直接 OOM 崩掉，没有预判。
+    /// 本移植加这一条是为了把崩溃换成可读的报错，用户体验不同是刻意的。
+    /// <b>它不参与格式合法性判定</b>：同一个工程在内存够的机器上照样能打开。
+    /// </remarks>
+    OutOfMemory,
 }
 
 /// <summary>导出失败的原因。与 macOS 版 <c>ExportError</c> 三个 case 一一对应。</summary>
@@ -67,6 +77,8 @@ public sealed class ImageCodecException : Exception
             "This import exceeds the current {0}-megapixel document budget or {1}-pixel side limit.",
             ImagingLimits.DocumentBudgetMegapixels,
             ImagingLimits.MaxSide.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)),
+        ImageImportError.OutOfMemory =>
+            "This machine does not have enough free memory to open the image. Close other applications and try again.",
         _ => "The image could not be read.",
     };
 
