@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Compositor.Selection</RootNamespace>
+    <AssemblyName>Compositor.Selection</AssemblyName>
+    <!-- 本工程不 NoWarn CS1591。
+         Compositor.Core 用 NoWarn 抑制了它（见该 csproj 的说明），
+         但选区是全新的独立工程，没有"承载 C 结构体布局的内部类型"这类豁免理由，
+         所以这里让编译器强制每个 public 成员都带 XML 注释。
+         代价是注释必须写全，好处是不依赖任何人工检查来发现漏注释。
+         scripts\check-xmldoc.ps1 的标签配平检查对本工程同样生效。 -->
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 几何类型 DocPoint / DocSize / DocRect / DocCoord 全部来自契约层，本工程只读不改。 -->
+    <ProjectReference Include="..\Compositor.Core\Compositor.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Compositor.Selection.Tests" />
+  </ItemGroup>
+
+</Project>
