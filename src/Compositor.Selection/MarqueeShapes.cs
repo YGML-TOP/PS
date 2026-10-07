@@ -160,3 +160,49 @@ public static class MarqueeShapes
         }, antialiased);
     }
 }
+
+/// <summary>
+/// 选区工具的轮廓种类，逐字照抄 Mac 版 <c>LassoKind</c>（<c>Selection.swift:75-83</c>）。
+/// </summary>
+/// <remarks>
+/// 🔴 <b>套索与选框是两个独立工具共用这一个枚举</b>，Mac 版源码注释写得很明确
+/// （<c>Selection.swift:78</c>）：<c>Rectangle</c> 与 <c>Ellipse</c> 是 Marquee 的轮廓，
+/// <b>不在</b> Lasso 的 Freehand/Polygonal 选项里出现。
+/// 所以<b>套索画不出矩形或椭圆，选框也画不出自由套索</b> ——
+/// 这是两种工具的词汇表边界，不是同一工具下的四个选项。
+/// <para>
+/// <see cref="LassoChoices"/> 与 <see cref="MarqueeChoices"/> 照抄 <c>:81-82</c>，
+/// 供 UI 层（AI-6）决定工具栏弹出菜单里显示哪两项。
+/// </para>
+/// </remarks>
+public enum LassoKind
+{
+    /// <summary>自由套索，照抄 <c>Selection.swift:76</c>。</summary>
+    Freehand = 0,
+
+    /// <summary>多边形套索，照抄 <c>Selection.swift:77</c>。</summary>
+    Polygonal = 1,
+
+    /// <summary>矩形选框，<b>只属于 Marquee</b>，照抄 <c>Selection.swift:79</c>。</summary>
+    Rectangle = 2,
+
+    /// <summary>椭圆选框，<b>只属于 Marquee</b>，照抄 <c>Selection.swift:80</c>。</summary>
+    Ellipse = 3,
+}
+
+/// <summary>套索工具的两种模式，照抄 Mac 版 <c>LassoKind.lassoChoices</c>（<c>Selection.swift:81</c>）。</summary>
+/// <remarks>注意这里<b>不含</b> <see cref="LassoKind.Rectangle"/> 与 <see cref="LassoKind.Ellipse"/>。</remarks>
+public static class LassoChoices
+{
+    /// <summary>套索工具可选项的只读快照，顺序与 Mac 版一致。</summary>
+    public static IReadOnlyList<LassoKind> All { get; } =
+        new[] { LassoKind.Freehand, LassoKind.Polygonal };
+}
+
+/// <summary>选框工具的两种模式，照抄 Mac 版 <c>LassoKind.marqueeChoices</c>（<c>Selection.swift:82</c>）。</summary>
+public static class MarqueeChoices
+{
+    /// <summary>选框工具可选项的只读快照，顺序与 Mac 版一致。</summary>
+    public static IReadOnlyList<LassoKind> All { get; } =
+        new[] { LassoKind.Rectangle, LassoKind.Ellipse };
+}
