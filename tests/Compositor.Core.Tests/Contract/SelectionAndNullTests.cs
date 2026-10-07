@@ -314,42 +314,214 @@ public sealed class SelectionAndNullTests
     }
 
     /// <summary>
-    /// 🔴 <b>覆盖度缺口登记：全分辨率覆盖度无法注入选区。</b>
-    /// <para>本文件按任务要求先用 <see cref="Coverage8.CreateFilled"/> 造一块 4×3 的
-    /// 全分辨率覆盖度（长度 12、值 200），确认这条数据路径本身是通的。</para>
-    /// <para>但 <see cref="SelectionMask"/> 的构造器是 <b>private</b>，公开入口只有
-    /// <see cref="SelectionMask.Empty"/> 与 <see cref="SelectionMask.Full"/> 两个静态工厂，
-    /// 而两者都只产出 1×1 均匀代理（<c>Data.Length == 1</c>）。
-    /// 因此这块 4×3 数据<b>无法</b>被装进 <see cref="SelectionMask"/>，
-    /// <see cref="SelectionMask.CoverageAt"/> 里"文档坐标 → 覆盖度局部坐标"那段分支
-    /// （即 <c>Coverage.IsUniform == false</c> 时走的 <c>iy * Width + ix</c> 索引）
-    /// <b>当前从公开 API 完全不可达</b>。</para>
-    /// <para><b>本测试刻意不用反射构造。</b>反射绕过私有构造器只能证明"反射能跑通"，
-    /// 不能证明契约层对外承诺了这条路径；而一旦反射可用，后来者会误以为
-    /// "全分辨率覆盖度"已经是受支持的用法。<b>真正的覆盖要等 AI-4 按评审流程
-    /// 给 <see cref="SelectionMask"/> 增加公开入口</b>，届时再用 4×3 非均匀数据
-    /// 测坐标换算与半开区间钳制。在那之前，这里只锁死两条公开路径的可见行为。</para>
+    /// 🔴 <b>契约 v1.2：<see cref="Coverage8.FromData"/> 打通「外部字节 → 覆盖度」这条路径。</b>
     /// </summary>
+    /// <remarks>
+    /// <para>v1.1 时这条路径<b>从公开 API 完全不可达</b>：<see cref="Coverage8"/> 只有
+    /// <c>CreateFilled</c>（填单值）与 <c>Uniform</c>（1×1），而 <see cref="SelectionMask"/>
+    /// 的构造器是 private、公开工厂只有 <see cref="SelectionMask.Empty"/> 与
+    /// <see cref="SelectionMask.Full"/>,两者都只产出 1×1 代理。
+    /// 后果是 AI-4 连一个矩形选区都构造不出来（矩形需要非零 <c>Bounds</c> + 非均匀 <c>Coverage</c>），
+    /// 连 <c>CoverageAt</c> 里 <c>iy * Width + ix</c> 那个索引分支都测不到。</para>
+    /// <para>v1.2 增加 <see cref="SelectionMask.FromCoverage"/> 与
+    /// <see cref="Coverage8.FromData"/> 后，这条路径可用了，本组测试改为锁它。</para>
+    /// <para><b>Empty / Full 刻意保持 1×1 代理不变</b> —— 满选区是图层面板的初始状态，
+    /// 为它分配全分辨率缓冲在 4000×4000 文档上是 16 MB 的纯浪费。</para>
+    /// </remarks>
     [Fact]
-    public void 全分辨率覆盖度无法注入选区_公开路径只有Empty与Full()
+    public void FromData_导入非均匀数据_Empty与Full仍是1乘1代理()
     {
-        Coverage8 raster = Coverage8.CreateFilled(4, 3, 200);
+        // v1.2 新入口：任意字节都能导进来。
+        byte[] bytes = { 0, 17, 34, 51, 68, 85, 102, 119, 136, 153, 170, 187 };
+        Coverage8 raster = Coverage8.FromData(bytes, 4, 3);
+        Assert.Equal(4, raster.Width);
+        Assert.Equal(3, raster.Height);
         Assert.Equal(12, raster.Data.Length);
-        Assert.Equal(200, raster.Data[0]);
+        Assert.Equal(187, raster.Data[11]);
 
         // Empty：1×1 代理，值为 0。
         Assert.Equal(1, SelectionMask.Empty.Coverage.Data.Length);
         Assert.Equal(0, SelectionMask.Empty.Coverage.Data[0]);
 
-        // Full：1×1 代理，值为 255 —— 同样不是全分辨率缓冲。
+        // Full：1×1 代理，值为 255 —— 仍然不是全分辨率缓冲。
         SelectionMask full = SelectionMask.Full(new DocSize(4, 3));
         Assert.Equal(1, full.Coverage.Data.Length);
         Assert.Equal(255, full.Coverage.Data[0]);
-
-        // 因此 CoverageAt 只会走均匀代理分支（返回 Data[0]），永远不会走到
-        // `iy * Coverage.Width + ix` 的索引分支。
         Assert.Equal(255, full.CoverageAt(new DocPoint(0, 0)));
         Assert.Equal(255, full.CoverageAt(new DocPoint(3, 2)));
+    }
+
+    /// <summary>
+    /// 🔴 <b>拷贝语义</b>：<see cref="Coverage8.FromData"/> 必须拷贝，不能持有调用方的 span 引用。
+    /// </summary>
+    /// <remarks>
+    /// <c>ReadOnlySpan&lt;byte&gt;</c> 是<b>栈视图</b>，出了调用者的栈帧就指向未定义内存。
+    /// 若实现只是 <c>_data = data.ToArray()</c> 之外的东西（比如持有 <c>MemoryMarshal.CreateSpan</c>
+    /// 的视图），本测试会在「改原数组后」立刻抓到内容被篡改。
+    /// </remarks>
+    [Fact]
+    public void FromData_是拷贝_修改原数组不影响已构造的覆盖度()
+    {
+        byte[] bytes = { 10, 20, 30, 40 };
+        Coverage8 coverage = Coverage8.FromData(bytes, 2, 2);
+        Assert.Equal(10, coverage.Data[0]);
+        Assert.Equal(40, coverage.Data[3]);
+
+        // 调用方改自己的数组 —— 覆盖度必须纹丝不动。
+        bytes[0] = 200;
+        bytes[3] = 250;
+
+        Assert.Equal(10, coverage.Data[0]);
+        Assert.Equal(20, coverage.Data[1]);
+        Assert.Equal(30, coverage.Data[2]);
+        Assert.Equal(40, coverage.Data[3]);
+    }
+
+    /// <summary>长度必须<b>恰好</b>等于 <c>w * h</c>，多一个少一个都抛。</summary>
+    [Theory]
+    [InlineData(4, 3, 11)]  // 少一个
+    [InlineData(4, 3, 13)]  // 多一个
+    [InlineData(4, 3, 0)]   // 空数组
+    [InlineData(2, 2, 3)]
+    public void FromData_长度不等于宽乘高_抛ArgumentException(int w, int h, int length)
+    {
+        var bytes = new byte[length];
+        ArgumentException ex = Assert.Throws<ArgumentException>(() => Coverage8.FromData(bytes, w, h));
+
+        Assert.Equal("data", ex.ParamName);
+    }
+
+    /// <summary>宽或高非正 → <see cref="ArgumentOutOfRangeException"/>，与 <c>CreateFilled</c> 口径一致。</summary>
+    [Theory]
+    [InlineData(0, 3, "w")]
+    [InlineData(-1, 3, "w")]
+    [InlineData(4, 0, "h")]
+    [InlineData(4, -1, "h")]
+    public void FromData_宽或高非正_抛ArgumentOutOfRangeException(int w, int h, string paramName)
+    {
+        byte[] bytes = new byte[12];
+        ArgumentOutOfRangeException ex = Assert.Throws<ArgumentOutOfRangeException>(
+            () => Coverage8.FromData(bytes, w, h));
+
+        Assert.Equal(paramName, ex.ParamName);
+    }
+
+    /// <summary>尺寸溢出 int 上限时必须先抛，<b>不得尝试分配</b>。</summary>
+    [Fact]
+    public void FromData_字节数溢出int上限_抛异常且尚未尝试分配()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => Coverage8.FromData(ReadOnlySpan<byte>.Empty, 46341, 46341));
+    }
+
+    /// <summary>
+    /// 🔴 <b>正常构造：<see cref="SelectionMask.FromCoverage"/> 后，
+    /// <see cref="SelectionMask.CoverageAt"/> 终于能走 <c>iy * Width + ix</c> 那个索引分支。</b>
+    /// </summary>
+    /// <remarks>
+    /// 刻意用<b>非零原点</b>的边界（10, 20），因为原点为 0 时，
+    /// Y 翻转与否都会得到同样的索引 —— 那样这条测试就锁不住铁律 1。
+    /// </remarks>
+    [Fact]
+    public void FromCoverage_正常构造_坐标换算与半开区间钳制都正确()
+    {
+        byte[] bytes = { 0, 17, 34, 51, 68, 85, 102, 119, 136, 153, 170, 187 };
+        Coverage8 coverage = Coverage8.FromData(bytes, 4, 3);
+        var bounds = new DocRect(new DocPoint(10, 20), new DocSize(4, 3));
+        SelectionMask mask = SelectionMask.FromCoverage(bounds, coverage);
+
+        Assert.False(mask.IsEmpty);
+        Assert.Equal(bounds, mask.Bounds);
+        Assert.Same(coverage, mask.Coverage);
+
+        // 局部 (ix, iy) → 全局 (10 + ix, 20 + iy)，行优先索引 = iy * 4 + ix。
+        Assert.Equal(0, mask.CoverageAt(new DocPoint(10, 20)));   // data[0 * 4 + 0]
+        Assert.Equal(51, mask.CoverageAt(new DocPoint(13, 20)));  // data[0 * 4 + 3]
+        Assert.Equal(68, mask.CoverageAt(new DocPoint(10, 21)));  // data[1 * 4 + 0]
+        Assert.Equal(187, mask.CoverageAt(new DocPoint(13, 22))); // data[2 * 4 + 3]
+
+        // 铁律 1：Y 向下。若实现写成 iy = Bottom - p.Y，
+        // (13, 22) 会取到 data[0 * 4 + 3] = 51 而不是 187 —— 本断言即可抓住。
+        Assert.NotEqual(51, mask.CoverageAt(new DocPoint(13, 22)));
+    }
+
+    /// <summary>边界是半开区间：右边界与下边界上的点返回 0。</summary>
+    [Theory]
+    [InlineData(14, 20)]  // Right
+    [InlineData(10, 23)]  // Bottom
+    [InlineData(14, 23)]  // 角
+    [InlineData(9, 20)]   // Left 外
+    [InlineData(10, 19)]  // Top 外
+    [InlineData(-1000, -1000)]
+    public void FromCoverage_半开区间之外一律返回0(double x, double y)
+    {
+        byte[] bytes = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
+        SelectionMask mask = SelectionMask.FromCoverage(
+            new DocRect(new DocPoint(10, 20), new DocSize(4, 3)),
+            Coverage8.FromData(bytes, 4, 3));
+
+        Assert.Equal(0, mask.CoverageAt(new DocPoint(x, y)));
+    }
+
+    /// <summary>尺寸不一致必须抛 —— <b>不自动裁剪、不补齐、不平移</b>。</summary>
+    [Theory]
+    [InlineData(4, 3, 3, 3)]   // 宽不符
+    [InlineData(4, 3, 4, 4)]   // 高不符
+    [InlineData(4, 3, 4, 5)]
+    [InlineData(1, 1, 2, 1)]   // 1×1 代理挂到更大的边界上
+    [InlineData(2, 1, 1, 1)]   // 反过来
+    public void FromCoverage_尺寸不一致_抛ArgumentException(int cw, int ch, int bw, int bh)
+    {
+        Coverage8 coverage = Coverage8.FromData(new byte[cw * ch], cw, ch);
+        var bounds = new DocRect(new DocPoint(0, 0), new DocSize(bw, bh));
+
+        ArgumentException ex = Assert.Throws<ArgumentException>(
+            () => SelectionMask.FromCoverage(bounds, coverage));
+
+        Assert.Equal("coverage", ex.ParamName);
+    }
+
+    /// <summary>1×1 均匀代理同样可以挂上去（它是合法的 <see cref="Coverage8"/>）。</summary>
+    [Fact]
+    public void FromCoverage_接受1乘1均匀代理()
+    {
+        SelectionMask mask = SelectionMask.FromCoverage(
+            new DocRect(new DocPoint(5, 5), new DocSize(1, 1)),
+            Coverage8.Uniform(128));
+
+        Assert.Equal(128, mask.CoverageAt(new DocPoint(5, 5)));
+        Assert.Equal(0, mask.CoverageAt(new DocPoint(6, 5)));
+    }
+
+    /// <summary>null 覆盖度必须抛。</summary>
+    [Fact]
+    public void FromCoverage_覆盖度为null_抛ArgumentNullException()
+    {
+        var bounds = new DocRect(new DocPoint(0, 0), new DocSize(4, 3));
+
+        Assert.Throws<ArgumentNullException>(() => SelectionMask.FromCoverage(bounds, null!));
+    }
+
+    /// <summary>
+    /// 🔴 <b>契约公开面不得扩大：<see cref="Coverage8.IsUniform"/> 仍是 internal。</b>
+    /// </summary>
+    /// <remarks>
+    /// 评审明确要求「<c>IsUniform</c> 继续保持 internal 不变」。
+    /// 本测试用反射守住这条线 —— 一旦有人顺手把它改成 public，
+    /// 外部就能开始绕过 <see cref="SelectionMask.CoverageAt"/> 直接索引
+    /// <see cref="Coverage8.Data"/>，而那条路径对 1×1 代理是越界的。
+    /// </remarks>
+    [Fact]
+    public void Coverage8_IsUniform_仍然不是public()
+    {
+        System.Reflection.PropertyInfo? prop = typeof(Coverage8).GetProperty(
+            "IsUniform",
+            System.Reflection.BindingFlags.Instance
+            | System.Reflection.BindingFlags.Public
+            | System.Reflection.BindingFlags.NonPublic);
+
+        Assert.NotNull(prop);
+        Assert.False(prop!.GetMethod!.IsPublic);
     }
 
     // ─────────────────── NullCanvas ───────────────────
