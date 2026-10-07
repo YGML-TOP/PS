@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Compositor.Selection.Tests</RootNamespace>
+    <AssemblyName>Compositor.Selection.Tests</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+
+    <!-- 与 Compositor.Core.Tests 同因同解：Directory.Build.props 全局开了
+         GenerateDocumentationFile=true 且 TreatWarningsAsErrors=true，
+         测试项目里每一个 public [Fact] 方法都会因 CS1591 被升级为编译错误。
+         测试方法写 XML 注释是噪音，测试程序集也不产出文档，直接关掉。 -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Compositor.Selection\Compositor.Selection.csproj" />
+    <ProjectReference Include="..\..\src\Compositor.Core\Compositor.Core.csproj" />
+  </ItemGroup>
+
+</Project>
