@@ -110,7 +110,12 @@ foreach ($t in $types) {
 Write-Host ''
 Write-Host '=== 契约 v1.1 签名核验 ===' -ForegroundColor Cyan
 Write-Host ("契约类型: {0}    命中: {1}    缺失: {2}" -f $types.Count, $okType, $missingType.Count) -ForegroundColor White
-Write-Host ("契约成员: {0}    命中: {1}    缺失: {2}" -f (($members.Values | ForEach-Object { $_.Count } | Measure-Object -Sum).Sum), $okMember, $missingMember.Count) -ForegroundColor White
+# ⚠️ 总数必须与上面的比对循环<b>同样去重</b>：比对循环用的是 Select-Object -Unique，
+#    这里若直接对 $_.Count 求和，同名成员（Width/Height/Left/Top… 跨 DocPoint/DocSize/DocRect 重复出现）
+#    会被重复计数，总数比命中数虚高 8，看起来像"少了 8 个成员"。初版正踩过这个坑。
+$memberTotal = 0
+foreach ($v in $members.Values) { $memberTotal += ($v | Select-Object -Unique).Count }
+Write-Host ("契约成员: {0}    命中: {1}    缺失: {2}" -f $memberTotal, $okMember, $missingMember.Count) -ForegroundColor White
 
 if ($missingType.Count -gt 0) {
     Write-Host ''
