@@ -4,6 +4,7 @@
     <Project Path="src/Compositor.Imaging/Compositor.Imaging.csproj" />
     <Project Path="src/Compositor.Project/Compositor.Project.csproj" />
     <Project Path="src/Compositor.History/Compositor.History.csproj" />
+    <Project Path="src/Compositor.Tools/Compositor.Tools.csproj" />
     <Project Path="src/Compositor.Selection/Compositor.Selection.csproj" />
     <Project Path="src/Compositor.Adjust/Compositor.Adjust.csproj" />
     <Project Path="src/Compositor.UI/Compositor.UI.csproj" />
@@ -15,6 +16,7 @@
     <Project Path="tests/Compositor.Imaging.Tests/Compositor.Imaging.Tests.csproj" />
     <Project Path="tests/Compositor.Project.Tests/Compositor.Project.Tests.csproj" />
     <Project Path="tests/Compositor.History.Tests/Compositor.History.Tests.csproj" />
+    <Project Path="tests/Compositor.Tools.Tests/Compositor.Tools.Tests.csproj" />
     <Project Path="tests/Compositor.Selection.Tests/Compositor.Selection.Tests.csproj" />
     <Project Path="tests/Compositor.Adjust.Tests/Compositor.Adjust.Tests.csproj" />
     <Project Path="tests/Compositor.UI.Tests/Compositor.UI.Tests.csproj" />

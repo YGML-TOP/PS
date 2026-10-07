@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Compositor.Tools</RootNamespace>
+    <AssemblyName>Compositor.Tools</AssemblyName>
+    <!-- 🔴 理由同 Compositor.History：全局开了 GenerateDocumentationFile + TreatWarningsAsErrors，
+         public 成员缺 /// 会直接编译失败（CS1591）。注释完整性由 scripts\check-xmldoc.ps1 保证。 -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Compositor.Core\Compositor.Core.csproj" />
+    <ProjectReference Include="..\Compositor.History\Compositor.History.csproj" />
+  </ItemGroup>
+
+</Project>
