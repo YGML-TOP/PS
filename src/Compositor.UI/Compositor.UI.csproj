@@ -21,4 +21,31 @@
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.0" />
   </ItemGroup>
 
+  <!--
+    NU1903 修复：把传递依赖 Tmds.DBus.Protocol 从 0.90.3 提升到 0.95.1。
+
+    依赖链（NuGet catalog 查证）：Avalonia.Desktop 12.0.0 → Avalonia.FreeDesktop
+      → Avalonia.FreeDesktop.AtSpi → Tmds.DBus.Protocol 0.90.3
+    漏洞：CVE-2026-39959 / GHSA-xrw6-gwf8-vvr9，CVSS 3.1 = 7.1（high）
+      恶意 D-Bus 对端可伪造信号、耗尽 fd 资源、发送畸形消息体致进程崩溃
+      （CWE-290 + CWE-400），GitHub 官方结论「无 workaround，只能升级」。
+    官方漏洞区间：>= 0.22.0, < 0.92.0（first patched = 0.92.0）。
+    取 0.95.1 是本地缓存已有且明确高于 0.92.0 的版本。
+
+    为什么用直接 PackageReference 而不是关审计：NuGet 的直接依赖优先规则会用
+    0.95.1 覆盖传递的 0.90.3。这是升级到补丁版本，不是把 NU1903 降级/静音。
+    反例是 <NuGetAudit>false</NuGetAudit> 或 <WarningsNotAsErrors>NU1903</...>，
+    那只是把扫描关掉，漏洞仍在依赖图里 —— 不采用。
+
+    运行时影响为零：FreeDesktop/AtSpi 是 Linux 专属的 AT-SPI 无障碍桥，
+    Windows 上永不加载。0.x 的次版本号在 SemVer 里本属破坏性边界，
+    但该代码路径在本平台不可达，故无实际兼容风险。
+
+    ⚠️ 同一暴露面存在于 src/Compositor.App/Compositor.App.csproj（同样引用
+    Avalonia.Desktop）。那里不属 AI-6 可写范围，需由其属主照同样方式 pin。
+  -->
+  <ItemGroup>
+    <PackageReference Include="Tmds.DBus.Protocol" Version="0.95.1" />
+  </ItemGroup>
+
 </Project>

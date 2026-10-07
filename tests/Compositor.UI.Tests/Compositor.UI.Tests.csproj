@@ -18,6 +18,29 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
   </ItemGroup>
 
+  <!--
+    ⚠️ 刻意不加 Avalonia.Headless —— 实测结论（详见 AvaloniaCoordinateSystemTests.cs
+       中 AvaloniaHeadlessBlocker 的说明）：
+
+    1. Avalonia 控件必须在 Dispatcher 线程创建，否则抛
+       InvalidOperationException（Dispatcher.VerifyAccess）；
+       用 Dispatcher.UIThread.InvokeAsync(...).GetAwaiter().GetResult() 会死锁，
+       因为 SetupWithoutStarting() 不启动事件泵。
+
+    2. 官方的 Avalonia.Headless.XUnit 在 12.x 传递依赖 xunit.v3，与本仓库统一的
+       xunit v2 冲突，实报 CS0433（FactAttribute 同时存在于 xunit.core 2.9.2 与
+       xunit.v3.core 3.2.2）。换测试框架会波及全部 6 条 lane，不擅自决定。
+
+    3. （已更正）Tmds.DBus.Protocol 0.90.3 的漏洞并非 Headless 引入，而是
+       Avalonia.Desktop 12.0.0 自身依赖链带入（FreeDesktop → AtSpi → DBus）。
+       故 Headless 移除后 NU1903 依旧存在。处置见
+       src/Compositor.UI/Compositor.UI.csproj 内对该包的直接版本 pin。
+
+    当前替代方案：用不依赖窗口的 Control.Bounds / Visual.TranslatePoint
+    在纯单元层面验证坐标系方向（铁律 1 的地基），效果等价且无死锁。
+    待总管裁决后再引入真正的 Headless 窗口 + 截图对比。
+  -->
+
   <ItemGroup>
     <ProjectReference Include="..\..\src\Compositor.Core\Compositor.Core.csproj" />
     <ProjectReference Include="..\..\src\Compositor.UI\Compositor.UI.csproj" />
