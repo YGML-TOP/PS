@@ -156,17 +156,26 @@ public sealed class EditTransaction
     }
 
     /// <summary>把收集到的 mutation 逆序撤销。</summary>
-    /// <param name="fromStart">从 0 开始逆序退，否则只退最外层事务内层 begin 之后新增的那一段。</param>
+    /// <param name="fromStart">从 0 开始逆序退，否则只退内层 <c>BeginEdit</c> 之后新增的那一段。</param>
     /// <remarks>
-    /// 🔴 <b>逆序</b>是硬要求：与 <see cref="HistoryEntry.Revert"/> 同一理由。
+    /// 🔴 <b>逆序是硬要求</b>，与 <see cref="CompositeMutation.Revert"/> 同一理由：
     /// 正序回退两个触碰同一状态的 mutation，结果与逆序不同，且不会报错 —— 静默错误。
+    /// <para>
+    /// 这里<b>不重新实现逆序循环</b>，而是切一段子区间交给 <see cref="CompositeMutation"/>，
+    /// 让「逆序」在全项目<b>只有一处实现</b>。否则三处各写一遍循环，改一处漏两处是迟早的事。
+    /// </para>
     /// </remarks>
     private void RevertAccumulated(bool fromStart)
     {
-        for (int i = _accumulated.Count - 1; i >= (fromStart ? 0 : _revertFloor); i--)
+        int start = fromStart ? 0 : _revertFloor;
+        if (start >= _accumulated.Count)
         {
-            _accumulated[i].Revert();
+            return;
         }
+
+        // 单元素区间也要走 CompositeMutation，语义一致：即便只有一个，正序逆序等价。
+        var slice = new CompositeMutation(_accumulated.Skip(start).ToArray());
+        slice.Revert();
 
         if (fromStart)
         {
@@ -174,7 +183,7 @@ public sealed class EditTransaction
         }
         else
         {
-            _accumulated.RemoveRange(_revertFloor, _accumulated.Count - _revertFloor);
+            _accumulated.RemoveRange(start, _accumulated.Count - start);
         }
     }
 

@@ -11,27 +11,26 @@ namespace Compositor.History;
 /// 把 Label 塞进 <see cref="DocumentMutation"/> 会把两层概念混在一起。
 /// 因此本类型持有 <see cref="Name"/>，并且一个 entry 可持有<b>多个</b> mutation。
 /// <para>
-/// ⚠️ 多 mutation 的<b>逆序</b>契约：<see cref="Apply"/> 按<b>正序</b>执行，
-/// <see cref="Revert"/> 必须按<b>逆序</b>执行。若两个 mutation 触碰同一处状态，
-/// 正序回放会得到与逆序回放不同的结果 —— 这是 undo 栈最常见的静默错误。
+/// 🔴 <b>Apply 正序 / Revert 逆序的实现在 <see cref="CompositeMutation"/> 上</b>，
+/// 本类<b>不重复实现</b>。逆序是正确性要求而非风格问题 —— 见该类型的说明。
 /// </para>
 /// </remarks>
 public sealed class HistoryEntry
 {
-    private readonly IReadOnlyList<DocumentMutation> _mutations;
+    private readonly CompositeMutation _mutation;
     private readonly IHistoryStore _store;
 
     /// <summary>构造一条撤销步。</summary>
     /// <param name="name">撤销菜单显示的名字，对应 Mac 侧 <c>pendingName</c>。</param>
     /// <param name="mutations">本次编辑产生的变更，按<b>应用顺序</b>排列。</param>
     /// <param name="store">快照/补丁载体，同时提供容量信息与 no-op 判定。</param>
-    /// <exception cref="ArgumentNullException">任一参数为 <see langword="null"/>。</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="mutations"/> 或 <paramref name="store"/> 为 <see langword="null"/>。</exception>
     public HistoryEntry(string name, IReadOnlyList<DocumentMutation> mutations, IHistoryStore store)
     {
         ArgumentNullException.ThrowIfNull(mutations);
         ArgumentNullException.ThrowIfNull(store);
         Name = name ?? "Edit";
-        _mutations = mutations;
+        _mutation = new CompositeMutation(mutations);
         _store = store;
     }
 
@@ -41,23 +40,11 @@ public sealed class HistoryEntry
     /// <summary>本条记录的持有字节数。</summary>
     public long RetainedBytes => _store.RetainedBytes;
 
-    /// <summary>正序执行全部变更。</summary>
-    public void Apply()
-    {
-        foreach (DocumentMutation m in _mutations)
-        {
-            m.Apply();
-        }
-    }
+    /// <summary>正序执行全部变更。委托给 <see cref="CompositeMutation.Apply"/>。</summary>
+    public void Apply() => _mutation.Apply();
 
     /// <summary><b>逆序</b>逆转全部变更，回到本 entry 应用之前的状态。</summary>
-    public void Revert()
-    {
-        for (int i = _mutations.Count - 1; i >= 0; i--)
-        {
-            _mutations[i].Revert();
-        }
-    }
+    public void Revert() => _mutation.Revert();
 
     /// <summary>判定本次编辑是否未产生变化。</summary>
     /// <param name="current">编辑后的文档状态。</param>
@@ -66,5 +53,5 @@ public sealed class HistoryEntry
 
     /// <summary>只读暴露所含变更，便于调试与断言。</summary>
     /// <remarks>对外暴露的是同一批实例，不是副本。</remarks>
-    public IReadOnlyList<DocumentMutation> Mutations => _mutations;
+    public IReadOnlyList<DocumentMutation> Mutations => _mutation.Parts;
 }

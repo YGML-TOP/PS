@@ -360,6 +360,110 @@ public sealed class HistoryStackTests
         Assert.True(rev.IsModified);   // 保存期间的新编辑仍然算未保存
     }
 
+    /// <summary>
+    /// 组合变更：Apply 正序、Revert 逆序。
+    /// </summary>
+    /// <remarks>
+    /// 🔴 这是 AI-1 明确要求的正确性保证（2026-10-07 回复）：
+    /// 「Revert 必须逆序（Count-1 → 0），因为后施加的变更依赖先施加的结果，
+    /// 正序撤销会崩。这条不是风格问题，是正确性问题。」
+    /// <para>Mac 侧无对应测试（Mac 没有组合 mutation 的概念）。</para>
+    /// </remarks>
+    [Fact]
+    public void CompositeMutationAppliesForwardAndRevertsBackward()
+    {
+        var log = new List<string>();
+        var composite = new CompositeMutation(new DocumentMutation[]
+        {
+            new LogMutation(log, "A-apply", "A-revert"),
+            new LogMutation(log, "B-apply", "B-revert"),
+            new LogMutation(log, "C-apply", "C-revert"),
+        });
+
+        composite.Apply();
+        Assert.Equal(new[] { "A-apply", "B-apply", "C-apply" }, log);
+
+        log.Clear();
+        composite.Revert();
+        Assert.Equal(new[] { "C-revert", "B-revert", "A-revert" }, log);
+    }
+
+    /// <summary>
+    /// 组合变更的逆序不是风格问题：两个 mutation 触碰同一状态时，正序回退会得到错误结果。
+    /// </summary>
+    /// <remarks>
+    /// 🔴 本条用<b>会静默出错</b>的场景证明逆序的必要性：
+    /// 第二个 mutation 基于第一个的<b>当前值</b>计算，而 <c>Revert</c> 写的是<b>施加时的旧值</b>。
+    /// 逆序时第二个先退（恢复中间态），第一个再退（恢复初始态），顺序颠倒就会留下脏值。
+    /// </remarks>
+    [Fact]
+    public void ReverseOrderIsRequiredWhenMutationsShareState()
+    {
+        var counter = 0;
+
+        // 第一次：0 → 10，Revert 写回 0。
+        var first = new CounterMutation(onApply: v => counter = v * 10, onRevert: () => counter = 0, newValue: 1);
+
+        // 第二次：基于 Apply 时的当前值 10 计算 → 25，Revert 写回 10。
+        // 🔴 必须惰性求值：若在构造时就算好 counter + 15，那时 counter 还是 0，断言会失真。
+        var second = new CounterMutation(onApply: _ => counter = 25, onRevert: () => counter = 10, newValue: 25);
+
+        var composite = new CompositeMutation(new DocumentMutation[] { first, second });
+        composite.Apply();
+        // first：0 → 10；second：10 → 25。Apply 全部完成后是 25。
+        Assert.Equal(25, counter);
+
+        composite.Revert();
+        // 逆序：second 先退 → 10，first 再退 → 0。回到初始值。
+        Assert.Equal(0, counter);
+
+        // 正序对照：first 先退到 0，second 再退到 10 —— 最终停在 10，初始值丢失。
+        counter = 0;
+        composite.Apply();
+        first.Revert();
+        second.Revert();
+        Assert.NotEqual(0, counter);
+    }
+
+    /// <summary>
+    /// 组合变更构造后不受调用方后续修改原集合影响。
+    /// </summary>
+    /// <remarks>历史一旦建立就不能被外部篡改，否则 undo 结果不可信。</remarks>
+    [Fact]
+    public void CompositeMutationCopiesPartsOnConstruction()
+    {
+        var log = new List<string>();
+        var parts = new List<DocumentMutation> { new LogMutation(log, "kept", "kept-revert") };
+        var composite = new CompositeMutation(parts);
+
+        parts.Add(new LogMutation(log, "late", "late-revert"));
+
+        composite.Apply();
+        Assert.Equal(new[] { "kept" }, log);
+        Assert.Equal(1, composite.Count);
+    }
+
+    /// <summary>
+    /// 空组合等价于 no-op，不抛异常。
+    /// </summary>
+    /// <remarks>对应 <c>DocumentHistory.swift:68</c> 允许 no-op 静默通过。</remarks>
+    [Fact]
+    public void EmptyCompositeIsANoOp()
+    {
+        var composite = new CompositeMutation(Array.Empty<DocumentMutation>());
+        composite.Apply();
+        composite.Revert();
+        Assert.Equal(0, composite.Count);
+    }
+
+    /// <summary>惰性求值的标量变更：Apply/Revert 各带一个动作，避免在构造期就把旧值算死。</summary>
+    private sealed class CounterMutation(Action<int> onApply, Action onRevert, int newValue) : DocumentMutation
+    {
+        public override void Apply() => onApply(newValue);
+
+        public override void Revert() => onRevert();
+    }
+
     /// <summary>记录调用的顺序型变更，仅供顺序断言使用。</summary>
     private sealed class LogMutation(List<string> log, string onApply, string onRevert) : DocumentMutation
     {
