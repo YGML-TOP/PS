@@ -107,13 +107,14 @@ public static class ContentFill
             }
 
             uint seed = 0x6d2b79f5u;
+            // 邻域表在像素循环外分配一次；原 C 是每次迭代重建，语义相同（每次都会被全量覆写）。
+            Span<int> neighbors = stackalloc int[4];
             for (; ; )
             {
                 while (head < tail)
                 {
                     int p = queue[head++], x = p % w, y = p / w, best = -1;
                     double score = double.MaxValue;
-                    Span<int> neighbors = stackalloc int[4];
                     neighbors[0] = x != 0 ? p - 1 : -1;
                     neighbors[1] = x + 1 < w ? p + 1 : -1;
                     neighbors[2] = y != 0 ? p - w : -1;

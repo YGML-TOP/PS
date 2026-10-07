@@ -89,15 +89,17 @@ public static class LevelsPixels
         float scale = (dimension - 1) / 255.0f;
         int dy = dimension, dz = dimension * dimension;
 
+        // 三个工作数组只在像素循环外分配一次。放在循环体内会让每个像素都做一次
+        // stackalloc，对大图是明显的开销。语义与原 C 的局部数组完全一致。
+        Span<float> position = stackalloc float[3];
+        Span<float> fraction = stackalloc float[3];
+        Span<int> lo = stackalloc int[3];
+
         for (int i = 0; i < count; ++i)
         {
             int p = i * 4;
             float alpha = pixels[p + 3];
             if (alpha == 0) continue;
-
-            Span<float> position = stackalloc float[3];
-            Span<float> fraction = stackalloc float[3];
-            Span<int> lo = stackalloc int[3];
 
             for (int channel = 0; channel < 3; ++channel)
             {
