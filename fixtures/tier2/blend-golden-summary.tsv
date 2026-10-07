@@ -1,0 +1,25 @@
+mode | case | path | coreImageFilter | cgModeRawValue
+Normal | normal | coreGraphics | - | 0
+Darken | darken | coreGraphics | - | 4
+Multiply | multiply | coreGraphics | - | 1
+Color Burn | colorBurn | coreImage | CIColorBurnBlendMode | 7
+Linear Burn | linearBurn | coreImage | CILinearBurnBlendMode | 0
+Lighten | lighten | coreGraphics | - | 5
+Screen | screen | coreGraphics | - | 2
+Color Dodge | colorDodge | coreImage | CIColorDodgeBlendMode | 6
+Linear Dodge (Add) | linearDodge | coreImage | CILinearDodgeBlendMode | 0
+Overlay | overlay | coreGraphics | - | 3
+Soft Light | softLight | coreImage | CISoftLightBlendMode | 8
+Hard Light | hardLight | coreGraphics | - | 9
+Vivid Light | vividLight | coreImage | CIVividLightBlendMode | 0
+Linear Light | linearLight | coreImage | CILinearLightBlendMode | 0
+Pin Light | pinLight | coreImage | CIPinLightBlendMode | 0
+Hard Mix | hardMix | coreImage | CIHardMixBlendMode | 0
+Difference | difference | coreGraphics | - | 10
+Exclusion | exclusion | coreGraphics | - | 11
+Subtract | subtract | coreImage | CISubtractBlendMode | 0
+Divide | divide | coreImage | CIDivideBlendMode | 0
+Hue | hue | coreGraphics | - | 12
+Saturation | saturation | coreGraphics | - | 13
+Color | color | coreGraphics | - | 14
+Luminosity | luminosity | coreGraphics | - | 15

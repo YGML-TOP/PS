@@ -1,0 +1,5 @@
+upstream_repo=robbietilton/Compositor
+upstream_sha=11d8d7a50992b24fd9a760a1c13b1c01b70aaf30
+workflow_run=37642533517
+generated_at=2026-10-07T15:20:47Z
+runner_image=macos26-20260907.0351.1
