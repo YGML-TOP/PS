@@ -41,15 +41,42 @@ var layers: [ImageLayer] = [] // Bottom to top.
 
 ⚠️ **group 不可见 ⇒ 子孙根本不进 `drawn`，一个像素都不画**（`shown: effective` 递归传递）。
 
-### 1.3 两条同构的合成入口 📄
+### 1.3 两条同构的合成入口 📄/✅
 
-| 入口 | 位置 | 用途 |
-|---|---|---|
-| `drawLiveComposite` | `Document/LiveLayerMask.swift:159` | **离线渲染**（导出、⌘E 合并）—— 规格以这条为准 |
-| `drawLayers` | `Rendering/EditorCanvas.swift:948` | 画布交互预览，分支多得多（`:1005-1149` 共 10 个） |
+| 入口 | 位置 | 核实 | 用途 |
+|---|---|---|---|
+| `drawLiveComposite` | `Document/LiveLayerMask.swift:159-200` | ✅ AI-1 逐行核对 | **离线渲染**（导出、⌘E 合并）—— 规格以这条为准 |
+| `drawLayers` | `Rendering/EditorCanvas.swift:948` | 📄 | 画布交互预览，分支多得多（`:1005-1149` 共 10 个） |
 
 两条**复用同一个 `LiveMaskRenderer` + `FolderMaskClip`**，核心语义一致。差异仅在预览分支
 （笔刷/渐变/变形/文本草稿等）。**复刻编辑期预览需单独提取，不要拿离线路径顶替。**
+
+<details><summary>✅ `drawLiveComposite` 逐行核对结论（2026-10-07，AI-1）</summary>
+
+规格正文未展开的六条，全部在 `:159-200` 里确认过：
+
+1. **`:164`** `records = Dictionary(uniqueKeysWithValues: document.layers.map { ... })`
+   —— 又是**全部图层**，与 `LayerGroups.swift:84` 同款。不是只有分组。
+2. **`:165`** 剪贴来源取的是 `records[$0]?.maskSourceID`，不是邻层推导。
+3. **`:167`** `let opacity = layer.effectiveOpacity(in: records)` —— **单个数**，
+   祖先链已经乘完，直接当 `opacity:` 传给 `LayerRenderer.draw`。蒙版走**另一个参数**。
+   → Windows 侧对应 `LayerCompositor.Compose` 的 `opacity = LayerOpacity.Effective(...)`、
+   `maskCoverage = 1.0`（本批次）。
+4. **`:166`** `guard let image = layer.asset?.image else { return }` —— **调整层就是靠这条被跳过的**
+   （调整层 `asset == nil`），它<b>不是</b>被 `isAdjustment` 判断挡掉的。
+   → Windows 侧对应「surface 查不到就记入 `CompositeResult.Skipped`」。
+5. **`:181`** `let mode = self.displayedBlendMode(for: layer)` —— 模式取自**图层记录**，
+   不取自图像。`displayedBlendMode`（`LayerAppearance.swift:76-79`）只在
+   `blendPreview.layerID == layer.id && activeLayerID == layer.id` 时偏离存储值；
+   离线渲染没有活动图层，**它就是恒等**。所以 Windows 侧直接用 `LayerNode.BlendMode` 与 Mac 同路。
+6. **`:160-163`** 只要文档里有任何调整层，整幅合成先渲进 `AdjustmentSurface` 离屏面，
+   再由它施加调整 —— **两段式**。本项目第一批次尚未实现，调整层被如实记入 `Skipped`。
+
+**⚠️ 但「可直译」的只有调度语义。** 该函数驱动的是 Core Graphics 的 draw 调用，
+真正混合像素的是闭源 CG；`LayerCompositor` 是 CPU 逐像素，机制不同。
+`BlendOps` 与 CG 的关系**只有 Tier 2 黄金样本能回答**，目前一个样本都没有。
+
+</details>
 
 ---
 
