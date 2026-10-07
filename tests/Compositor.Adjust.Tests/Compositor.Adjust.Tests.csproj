@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Compositor.Adjust.Tests</RootNamespace>
+    <AssemblyName>Compositor.Adjust.Tests</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+
+    <!-- Directory.Build.props 全局开了 GenerateDocumentationFile=true + TreatWarningsAsErrors=true，
+         与 Compositor.Core.Tests 同样在 csproj 局部关掉文档生成并 NoWarn CS1591。 -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Compositor.Adjust\Compositor.Adjust.csproj" />
+  </ItemGroup>
+
+</Project>
