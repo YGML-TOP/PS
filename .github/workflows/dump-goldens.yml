@@ -29,14 +29,23 @@ jobs:
     timeout-minutes: 60
     env:
       UPSTREAM_REPO: robbietilton/Compositor
+      # 钉死上游 commit：黄金样本必须可复现。上游改版后要显式改这里并重跑，
+      # 再用 out/provenance.txt 里的 sha 对比新旧样本的差异。
+      UPSTREAM_REF: 11d8d7a50992b24fd9a760a1c13b1c01b70aaf30
       # 测试进程的工作目录不可控，所以同时用 TEST_RUNNER_ 前缀传参和事后 find 兜底。
       FIXTURE_NAME: blend-golden.json
 
     steps:
+      # ⚠️ 顺序要紧：先签出本仓库（生成器在这里），再把上游签到 upstream/。
+      # 少写第一个 checkout 会导致"本仓库缺少 CompositorTests/..."。
+      - name: Checkout this repo (fixture generator)
+        uses: actions/checkout@v7
+
       - name: Checkout upstream Compositor
         uses: actions/checkout@v7
         with:
           repository: ${{ env.UPSTREAM_REPO }}
+          ref: ${{ env.UPSTREAM_REF }}
           path: upstream
 
       - name: Select Xcode 26.6
@@ -105,7 +114,7 @@ jobs:
           cp upstream/CompositorTests/CompositorBlendGoldenDumpTests.swift out/ 2>/dev/null || true
           {
             echo "upstream_repo=$UPSTREAM_REPO"
-            echo "upstream_sha=${{ steps.upstream.outputs.sha }}"
+            echo "upstream_sha=$UPSTREAM_REF"
             echo "workflow_run=${{ github.run_id }}"
             echo "generated_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "runner_image=${ImageOS:-unknown}-${ImageVersion:-unknown}"
@@ -120,7 +129,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: blend-golden-${{ steps.upstream.outputs.sha }}
+          name: blend-golden-${{ env.UPSTREAM_REF }}
           path: out/
           retention-days: 90
           if-no-files-found: error
