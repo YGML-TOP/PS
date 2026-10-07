@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Compositor.App.Tests</RootNamespace>
+    <AssemblyName>Compositor.App.Tests</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+
+    <!-- 🔴 与 Compositor.Core.Tests 同样的理由：Directory.Build.props 全局开了
+         GenerateDocumentationFile=true + TreatWarningsAsErrors=true，
+         测试方法写 XML 注释是噪音，测试程序集也不需要产出文档文件。 -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Compositor.App\Compositor.App.csproj" />
+  </ItemGroup>
+
+</Project>
