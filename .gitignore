@@ -1,0 +1,12 @@
+﻿# 构建产物
+bin/
+obj/
+out/
+*.user
+
+# 测试产物
+test-artifacts/
+TestResults/
+
+# .NET 本地缓存
+*.binlog

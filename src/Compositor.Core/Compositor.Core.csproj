@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Compositor.Core</RootNamespace>
+    <AssemblyName>Compositor.Core</AssemblyName>
+    <!-- 未完成 XML 注释的类型用 NoWarn 局部豁免，公开契约类型仍强制要求注释。 -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+</Project>

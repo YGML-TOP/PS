@@ -1,0 +1,25 @@
+<Project>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!-- 验收标准 #8：dotnet build 零警告。警告即视为错误，不靠人工记得看。 -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningLevel>9999</WarningLevel>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+
+    <!-- 任务书要求：内存布局用 Span&lt;byte&gt; + ref struct，避免 unsafe。 -->
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+
+    <!-- 直译必须复现 C 的 32 位无符号溢出语义（noise_hash、mix32 等），
+         所以绝不能打开溢出检查。默认即 unchecked，这里显式写死防止有人改。 -->
+    <CheckForOverflowUnderflow>false</CheckForOverflowUnderflow>
+
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+</Project>
