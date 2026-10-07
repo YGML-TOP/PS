@@ -1,0 +1,135 @@
+name: Dump Compositor goldens (Tier 2)
+
+# 🔴 Compositor for Windows · Tier 2 通道
+#
+# 在 GitHub Actions 的 macos-26 runner 上真跑 macOS，用**上游 Compositor（MIT）**产出黄金样本。
+# 公开仓库 macOS runner 免费；私有仓库按 10x 计价 —— 所以这个仓库必须是 public。
+#
+# 本仓库**不含任何 Windows 代码**，只有 workflow 和要拷进上游测试目录的 Swift 文件。
+# 上游 Compositor.xcodeproj 是 objectVersion 77 + PBXFileSystemSynchronizedRootGroup，
+# 所以把 .swift 拷进 CompositorTests/ 即自动纳入测试 target，不需要改 project.pbxproj。
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 每月一次，用于确认上游改版后黄金样本是否漂移。
+    - cron: '37 4 1 * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tier2-goldens
+  cancel-in-progress: false
+
+jobs:
+  blend-goldens:
+    name: blend-mode golden pixels
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      UPSTREAM_REPO: robbietilton/Compositor
+      # 测试进程的工作目录不可控，所以同时用 TEST_RUNNER_ 前缀传参和事后 find 兜底。
+      FIXTURE_NAME: blend-golden.json
+
+    steps:
+      - name: Checkout upstream Compositor
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ env.UPSTREAM_REPO }}
+          path: upstream
+
+      - name: Select Xcode 26.6
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app
+
+      # 上游提交可能不含本地这个文件，所以钉一个确切的 ref。
+      - name: Record upstream commit
+        id: upstream
+        working-directory: upstream
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Inject golden dump test into CompositorTests/
+        run: |
+          set -euo pipefail
+          src="CompositorTests/CompositorBlendGoldenDumpTests.swift"
+          test -f "$src" || { echo "::error::本仓库缺少 $src"; exit 1; }
+          cp "$src" upstream/CompositorTests/
+          ls -l upstream/CompositorTests/CompositorBlendGoldenDumpTests.swift
+
+      - name: Resolve Swift packages
+        working-directory: upstream
+        run: >
+          xcodebuild -resolvePackageDependencies
+          -project Compositor.xcodeproj
+          -scheme Compositor
+          -onlyUsePackageVersionsFromResolvedFile
+
+      - name: Build for testing
+        working-directory: upstream
+        run: >
+          xcodebuild build-for-testing
+          -project Compositor.xcodeproj
+          -scheme Compositor
+          -destination 'platform=macOS,arch=arm64'
+          -configuration Debug
+          -derivedDataPath DerivedData
+          CODE_SIGN_IDENTITY=-
+
+      - name: Run golden dump test
+        working-directory: upstream
+        continue-on-error: true
+        run: >
+          xcodebuild test-without-building
+          -project Compositor.xcodeproj
+          -scheme Compositor
+          -destination 'platform=macOS,arch=arm64'
+          -derivedDataPath DerivedData
+          -resultBundlePath GoldenResults.xcresult
+          -parallel-testing-enabled NO
+          -only-testing:CompositorTests/CompositorBlendGoldenDumpTests
+          TEST_RUNNER_COMPOSITOR_FIXTURE_DIR="${{ github.workspace }}/out"
+
+      - name: Collect fixtures
+        # 即使测试失败也执行 —— Swift Testing 的 #expect 失败不会中断写文件，
+        # 但如果真的抛异常，这里是最后的机会。
+        if: always()
+        run: |
+          set -uo pipefail
+          mkdir -p out
+          if [ -f "upstream/out/$FIXTURE_NAME" ]; then
+            cp "upstream/out/$FIXTURE_NAME" "out/$FIXTURE_NAME"
+          else
+            echo "::warning::预期路径没有产物，改用 find 兜底"
+            find upstream -name "$FIXTURE_NAME" -type f -exec cp {} "out/$FIXTURE_NAME" \; 2>/dev/null || true
+          fi
+          cp upstream/CompositorTests/CompositorBlendGoldenDumpTests.swift out/ 2>/dev/null || true
+          {
+            echo "upstream_repo=$UPSTREAM_REPO"
+            echo "upstream_sha=${{ steps.upstream.outputs.sha }}"
+            echo "workflow_run=${{ github.run_id }}"
+            echo "generated_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "runner_image=${ImageOS:-unknown}-${ImageVersion:-unknown}"
+          } > out/provenance.txt
+          ls -l out/ || true
+          if [ ! -f "out/$FIXTURE_NAME" ]; then
+            echo "::error::没有拿到 $FIXTURE_NAME —— 本次没有产出黄金样本"
+            exit 1
+          fi
+
+      - name: Upload goldens
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: blend-golden-${{ steps.upstream.outputs.sha }}
+          path: out/
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Upload test result bundle
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: blend-golden-xcresult
+          path: upstream/*.xcresult
+          retention-days: 7
+          if-no-files-found: ignore
