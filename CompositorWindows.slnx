@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Compositor.Core/Compositor.Core.csproj" />
+    <Project Path="src/Compositor.UI/Compositor.UI.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Compositor.Core.Tests/Compositor.Core.Tests.csproj" />
