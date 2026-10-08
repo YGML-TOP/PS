@@ -1,46 +1,46 @@
-# macOS `.comp` dump —— 阶段二互通验证的采集端
-#
-# 这个文件**不在 Windows 构建里**，只在 macOS 上跑。用途：
-# 用真正的 macOS 版 Compositor 产出一批 `.comp`，交给 Windows 侧读，
-# 证明两端接受的是同一套规则。
-#
-# 为什么必须真跑而不是手搓夹具：手搓夹具只能证明"Windows 接受一份符合 Mac 规则的包"，
-# 证不了"Windows 接受的恰好等于 Mac 接受的"。后者是互通的全部意义，
-# 而且只有真机能证——ImageIO 的解码细节、FileWrapper 的包布局、
-# JSONEncoder 的具体输出，都只能在 macOS 上观察。
-#
-# ─────────────────────────────────────────────────────────────────────
-# 怎么跑（GitHub Actions，macos-26 runner）
-# ─────────────────────────────────────────────────────────────────────
-#
-#   - uses: actions/checkout@v4
-#   - uses: swift-actions/setup-swift@v2
-#     with:
-#       swift-version: '6.0'
-#   - name: 生成 .comp 样本
-#     run: |
-#       swiftc -O \
-#         -o "$RUNNER_TEMP/compositor-tests" \
-#         -parse-as-library \
-#         Package.swift 的测试目标
-#       "$RUNNER_TEMP/compositor-tests" --dump-comp "$GITHUB_WORKSPACE/dump"
-#
-# 本文件要挂进 CompositorTests 目标里作为
-# `CompositorTests.DumpFixtures`（或任何可执行入口）调用。
-# 具体接法见文件末尾的 TODO 标记。
-#
-# ─────────────────────────────────────────────────────────────────────
-# 产出物
-# ─────────────────────────────────────────────────────────────────────
-#
-#   dump/
-#     v01-groups-pending.comp/          ← 与 Windows 侧夹具同名
-#     ...
-#     v11-everything.comp/
-#     digest.txt                        ← 每个包的 SHA256 + 字节数
-#
-# 同名是关键：Windows 侧的 AllVersionsFixtureTests 直接按名字读 dump/，
-# 两边用同一份清单，diff 才有意义。
+// macOS `.comp` dump —— 阶段二互通验证的采集端
+//
+// 这个文件**不在 Windows 构建里**，只在 macOS 上跑。用途：
+// 用真正的 macOS 版 Compositor 产出一批 `.comp`，交给 Windows 侧读，
+// 证明两端接受的是同一套规则。
+//
+// 为什么必须真跑而不是手搓夹具：手搓夹具只能证明"Windows 接受一份符合 Mac 规则的包"，
+// 证不了"Windows 接受的恰好等于 Mac 接受的"。后者是互通的全部意义，
+// 而且只有真机能证——ImageIO 的解码细节、FileWrapper 的包布局、
+// JSONEncoder 的具体输出，都只能在 macOS 上观察。
+//
+// ─────────────────────────────────────────────────────────────────────
+// 怎么跑（GitHub Actions，macos-26 runner）
+// ─────────────────────────────────────────────────────────────────────
+//
+//   - uses: actions/checkout@v4
+//   - uses: swift-actions/setup-swift@v2
+//     with:
+//       swift-version: '6.0'
+//   - name: 生成 .comp 样本
+//     run: |
+//       swiftc -O \
+//         -o "$RUNNER_TEMP/compositor-tests" \
+//         -parse-as-library \
+//         Package.swift 的测试目标
+//       "$RUNNER_TEMP/compositor-tests" --dump-comp "$GITHUB_WORKSPACE/dump"
+//
+// 本文件要挂进 CompositorTests 目标里作为
+// `CompositorTests.DumpFixtures`（或任何可执行入口）调用。
+// 具体接法见文件末尾的 TODO 标记。
+//
+// ─────────────────────────────────────────────────────────────────────
+// 产出物
+// ─────────────────────────────────────────────────────────────────────
+//
+//   dump/
+//     v01-groups-pending.comp/          ← 与 Windows 侧夹具同名
+//     ...
+//     v11-everything.comp/
+//     digest.txt                        ← 每个包的 SHA256 + 字节数
+//
+// 同名是关键：Windows 侧的 AllVersionsFixtureTests 直接按名字读 dump/，
+// 两边用同一份清单，diff 才有意义。
 
 import AppKit
 import Foundation
