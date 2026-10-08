@@ -195,15 +195,8 @@ func dumpAll(to outputDirectory: URL) async throws {
     try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
 
     for plan in SampleSet.plans {
-        // ProjectManifest 的无默认值成员是 documentID/width/height/activeLayerID/layers
-        // （ProjectStore.swift:24-28），memberwise init 必须全给。
-        var manifest = ProjectManifest(documentID: Ids.documentID, width: 100, height: 80,
-                                       activeLayerID: nil, layers: [])
-        manifest.version = plan.version
-        manifest.documentID = Ids.documentID
-        manifest.width = 100
-        manifest.height = 80
-        manifest.resolution = plan.version >= 8 ? 300 : 72
+        // manifest 故意留到 layers 建完之后再构造 —— documentID / width / height /
+        // activeLayerID 全是 `let`（ProjectStore.swift:24-27），一旦构造就不能再赋值。
 
         var images: [UUID: ImportedImage] = [:]
         var masks: [UUID: ImportedImage] = [:]
@@ -343,6 +336,13 @@ func dumpAll(to outputDirectory: URL) async throws {
             layers.append(shapeLayer)
         }
 
+        // layers 已经建完，这时才能确定 activeLayerID。四个必填成员一次给全，
+        // 之后只碰 version / resolution / guides 这三个 var 属性。
+        var manifest = ProjectManifest(documentID: Ids.documentID, width: 100, height: 80,
+                                       activeLayerID: layers.last?.id, layers: layers)
+        manifest.version = plan.version
+        manifest.resolution = plan.version >= 8 ? 300 : 72
+
         if plan.guidesGroupOpacity {
             manifest.guides = [
                 CanvasGuide(id: UUID(uuidString: "11111111-2222-4333-8444-555555555555")!,
@@ -351,9 +351,6 @@ func dumpAll(to outputDirectory: URL) async throws {
                             axis: .vertical, position: 40),
             ]
         }
-
-        manifest.layers = layers
-        manifest.activeLayerID = layers.last?.id
 
         let destination = outputDirectory.appendingPathComponent("\(plan.name).comp")
         // actor 隔离：签名同步也要 await，见 dumpAll 的注释。
