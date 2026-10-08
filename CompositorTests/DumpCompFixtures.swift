@@ -182,8 +182,10 @@ func imported(_ image: CGImage, name: String) -> ImportedImage {
 }
 
 func transform(_ width: Double, _ height: Double) -> LayerTransform {
+    // 🔴 字段名逐字取自 LayerTransform.swift:19-24 —— 是 `rotation` 不是 `rotationDegrees`，
+    //    采样档是 `.high`（原始值 "High quality"，LayerTransform.swift:7）不是 `.highQuality`。
     LayerTransform(origin: CGPoint(x: 0, y: 0), size: CGSize(width: width, height: height),
-                    rotationDegrees: 0, flipX: false, flipY: false, sampling: .highQuality)
+                    rotation: 0, flipX: false, flipY: false, sampling: .high)
 }
 
 /// 逐个版本构造 snapshot 并保存。
@@ -193,7 +195,10 @@ func dumpAll(to outputDirectory: URL) async throws {
     try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
 
     for plan in SampleSet.plans {
-        var manifest = ProjectManifest()
+        // ProjectManifest 的无默认值成员是 documentID/width/height/activeLayerID/layers
+        // （ProjectStore.swift:24-28），memberwise init 必须全给。
+        var manifest = ProjectManifest(documentID: Ids.documentID, width: 100, height: 80,
+                                       activeLayerID: nil, layers: [])
         manifest.version = plan.version
         manifest.documentID = Ids.documentID
         manifest.width = 100
@@ -215,8 +220,10 @@ func dumpAll(to outputDirectory: URL) async throws {
         addBase()
 
         if plan.groups {
+            // 🔴 `let imageFile: String?` 没有 `= nil` 默认值（ProjectStore.swift:38），
+            //    所以 Swift 的 memberwise init 仍把它当必填 —— 组图层必须显式传 nil。
             var folder = ProjectLayerRecord(id: Ids.folder, name: "Folder", isVisible: true,
-                                            transform: transform(100, 80), isGroup: true)
+                                            transform: transform(100, 80), imageFile: nil, isGroup: true)
             if plan.groupMask, let mask = makeMaskImage(width: 100, height: 80) {
                 masks[Ids.folder] = imported(mask, name: "Folder Mask")
                 folder.maskFile = "\(Ids.folder.uuidString).mask.png"
