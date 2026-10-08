@@ -1,0 +1,208 @@
+name: Dump Compositor .comp packages (Tier 2)
+
+# 🔴 Compositor for Windows · Tier 2 通道 · 波次 B（.comp 工程包）
+#
+# 在 GitHub Actions 的 macos-26 runner 上真跑 macOS，用**上游 Compositor（MIT）**的
+# 真实 `ProjectStore.save` 产出 .comp 工程样本（ground truth）。
+#
+# 与 dump-goldens.yml 的区别：那次产出一个 JSON 单文件，这次产出的是
+# **.comp 目录包**（<name>.comp/manifest.json + <name>.comp/images/*.png），
+# 所以收集逻辑不一样，见下面 Collect 那一步的注释。
+#
+# 采集端是 `CompositorTests/DumpCompFixtures.swift`（逐字拷贝自
+# CompositorWindows-project/scripts/mac-dump/DumpCompFixtures.swift）。
+# 它的 slug（v01-groups-pending … v11-everything）与 Windows 侧手搓夹具同名，
+# 这是逐字段差异表能对上的前提。
+#
+# 本仓库**不含任何 Windows 代码**，只有 workflow 和要拷进上游测试目录的 Swift 文件。
+# 上游 Compositor.xcodeproj 是 objectVersion 77 + PBXFileSystemSynchronizedRootGroup，
+# 所以把 .swift 拷进 CompositorTests/ 即自动纳入测试 target，不需要改 project.pbxproj。
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tier2-comps
+  cancel-in-progress: false
+
+jobs:
+  comp-packages:
+    name: .comp project packages
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      UPSTREAM_REPO: robbietilton/Compositor
+      # 钉死上游 commit：样本必须可复现。上游改版后要显式改这里并重跑，
+      # 再用 out/provenance.txt 里的 sha 对比新旧样本的差异。
+      UPSTREAM_REF: 11d8d7a50992b24fd9a760a1c13b1c01b70aaf30
+      # SampleSet.plans 的条数。少一个 .comp 就让 Windows 侧的比对静默少一项，
+      # 那比直接失败更难查，所以拿它当硬门槛。
+      MIN_SAMPLES: 11
+      # 采集端读的产出目录（DumpCompFixtures.outputDirectory()）。
+      DUMP_DIR: ${{ github.workspace }}/out
+
+    steps:
+      # ⚠️ 顺序要紧：先签出本仓库（采集端在这里），再把上游签到 upstream/。
+      # 反了就报「本仓库缺少 CompositorTests/...」。这是前一轮踩过的坑。
+      - name: Checkout this repo (fixture generator)
+        uses: actions/checkout@v7
+
+      - name: Checkout upstream Compositor
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ env.UPSTREAM_REPO }}
+          ref: ${{ env.UPSTREAM_REF }}
+          path: upstream
+
+      - name: Select Xcode 26.6
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app
+
+      # 必须在上游任何 xcodebuild 之前注入：文件系统的 synchronized group
+      # 是构建时才扫目录的，晚一步就编不进测试 target。
+      - name: Inject .comp dump test into CompositorTests/
+        run: |
+          set -euo pipefail
+          src="CompositorTests/DumpCompFixtures.swift"
+          test -f "$src" || { echo "::error::this repo is missing $src"; exit 1; }
+          cp "$src" upstream/CompositorTests/
+          ls -l upstream/CompositorTests/DumpCompFixtures.swift
+
+      - name: Resolve Swift packages
+        working-directory: upstream
+        run: >
+          xcodebuild -resolvePackageDependencies
+          -project Compositor.xcodeproj
+          -scheme Compositor
+          -onlyUsePackageVersionsFromResolvedFile
+
+      # 编译错误必须在这里就炸出来，不能拖到 test 步骤：
+      # test-without-building 用的是这一步的产物，编译失败会让 test 步骤报出
+      # 误导性的「找不到测试」。continue-on-error 只给 test 步骤，不给这一步。
+      - name: Build for testing
+        working-directory: upstream
+        run: >
+          xcodebuild build-for-testing
+          -project Compositor.xcodeproj
+          -scheme Compositor
+          -destination 'platform=macOS,arch=arm64'
+          -configuration Debug
+          -derivedDataPath DerivedData
+          CODE_SIGN_IDENTITY=-
+
+      - name: Run .comp dump test
+        working-directory: upstream
+        # continue-on-error：Swift Testing 的 #expect 失败不该吞掉已经写出来的文件。
+        # 产物完整性由下面 Collect 的体检把关，不靠这一步的退出码。
+        continue-on-error: true
+        env:
+          COMPOSITOR_DUMP_DIR: ${{ env.DUMP_DIR }}
+        run: >
+          xcodebuild test-without-building
+          -project Compositor.xcodeproj
+          -scheme Compositor
+          -destination 'platform=macOS,arch=arm64'
+          -derivedDataPath DerivedData
+          -resultBundlePath CompResults.xcresult
+          -parallel-testing-enabled NO
+          -only-testing:CompositorTests/DumpCompFixturesTests
+
+      - name: Collect fixtures
+        # 即使测试失败也执行 —— #expect 失败不会中断写文件，
+        # 但如果真的抛异常，这里是最后的机会。
+        if: always()
+        run: |
+          set -uo pipefail
+          mkdir -p out
+          # ⚠️ 上游是沙盒 .app 包。测试进程的 cwd 与环境变量都可能落在
+          #    ~/Library/Containers/<bundle-id>/Data/ 下，而不是工作区。
+          #    实测（run 37642040229，dump-goldens.yml 同款坑）：文件写在容器里，
+          #    工作区里找不到。所以这里扫 $HOME / $RUNNER_TEMP / 工作区，不猜路径。
+          #    .comp 是**目录包**，所以用 -type d 找，不是 -type f。
+          #    采集端写的是平铺结构（out/<name>.comp），不是 samples/<slug>/<slug>.comp。
+          if [ ! -d "out/v11-everything.comp" ]; then
+            found=$(find "$HOME" "$RUNNER_TEMP" . -type d -name '*.comp' 2>/dev/null | head -1 || true)
+            if [ -n "${found:-}" ]; then
+              base=$(dirname "$found")
+              echo "found .comp packages under: $base"
+              cp -R "$base"/. out/ 2>/dev/null || true
+            fi
+          fi
+
+          echo "--- sample tree ---"
+          find out -maxdepth 2 -type d 2>/dev/null | sort | head -40 || true
+
+          # 逐包体检：manifest.json 必须存在、images/ 必须存在，
+          # 并且 manifest.json 必须能被**通用 JSON 解析器**（python3 的 json 模块，
+          # 与写它的那套 JSONEncoder 无关）解析。
+          ok=0
+          json_ok=0
+          for pkg in out/*.comp; do
+            [ -d "$pkg" ] || continue
+            name=$(basename "$pkg")
+            has_m=no; has_i=no; parsed=no
+            [ -f "$pkg/manifest.json" ] && has_m=yes
+            [ -d "$pkg/images" ] && has_i=yes
+            if [ "$has_m" = yes ] && [ "$has_i" = yes ]; then
+              n=$(ls -1 "$pkg/images" | wc -l | tr -d ' ')
+              if python3 -c "import json,sys; json.load(open(sys.argv[1],encoding='utf-8'))" \
+                   "$pkg/manifest.json" 2>/dev/null; then
+                parsed=yes
+                json_ok=$((json_ok + 1))
+              fi
+              echo "ok  $name images=$n manifest_json=$parsed"
+              ok=$((ok + 1))
+            else
+              echo "BAD $name (manifest.json=$has_m images_dir=$has_i)"
+            fi
+          done
+          echo "packages_ok=$ok"
+          echo "manifest_json_ok=$json_ok"
+
+          # 抓测试进程 stdout，dump -> 那行是成功的判据。
+          if [ -d upstream/CompResults.xcresult ]; then
+            xcrun xcresulttool get test-results tests --path upstream/CompResults.xcresult 2>/dev/null \
+              | head -80 > out/test-summary.json || true
+          fi
+          cp upstream/CompositorTests/DumpCompFixtures.swift out/ 2>/dev/null || true
+          {
+            echo "upstream_repo=$UPSTREAM_REPO"
+            echo "upstream_sha=$UPSTREAM_REF"
+            echo "workflow_run=${{ github.run_id }}"
+            echo "generated_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "runner_image=${ImageOS:-unknown}-${ImageVersion:-unknown}"
+            echo "packages_ok=$ok"
+            echo "manifest_json_ok=$json_ok"
+            echo "min_samples=$MIN_SAMPLES"
+          } > out/provenance.txt
+
+          ls -l out/ || true
+
+          if [ "$ok" -lt "$MIN_SAMPLES" ]; then
+            echo "::error::only $ok complete .comp packages, need $MIN_SAMPLES"
+            exit 1
+          fi
+          if [ "$json_ok" -ne "$ok" ]; then
+            echo "::error::$((ok - json_ok)) manifest.json failed generic JSON parse"
+            exit 1
+          fi
+
+      - name: Upload .comp samples
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: comp-packages-${{ env.UPSTREAM_REF }}
+          path: out/
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Upload test result bundle
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: comp-packages-xcresult
+          path: upstream/*.xcresult
+          retention-days: 7
+          if-no-files-found: ignore
